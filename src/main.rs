@@ -1,5 +1,7 @@
 mod gramspec_parser;
+mod generator;
 use gramspec_parser::parser::Parser;
+use generator::Generator;
 use std::fs;
 
 fn main() {
@@ -9,10 +11,10 @@ fn main() {
 	// Tokenize the grammar specification
 	let mut parser = Parser::new(gramspec);
 	// Tokenize the input string
-	let gram_spec = parser.parse().unwrap();
+	let gramspec = parser.parse().unwrap();
 
-	for (rule_name, expression) in gram_spec.rules {
-		println!("Rule: {}", rule_name);
-		println!("Expression: {:?}", expression);
-	}
+	let generator = Generator::new(gramspec);
+	let output = generator.generate("TestLanguage".to_string()).unwrap();
+
+	print!("{}", output);
 }
