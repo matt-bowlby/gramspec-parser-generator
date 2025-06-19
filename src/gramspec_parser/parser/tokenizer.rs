@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use super::token::token_type::TokenType;
 use super::token::Token;
 
@@ -15,7 +17,7 @@ impl Tokenizer {
 	}
 
 	/// Tokenizes the input string and returns a vector of tokens.
-	pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
+	pub fn tokenize(&mut self) -> Result<Vec<Token>, Box<dyn Error>> {
 		// Initialize a vector to hold the tokens
 		let mut tokens = Vec::new();
 		// Loop until we reach the end of the input string
@@ -59,7 +61,7 @@ impl Tokenizer {
 	}
 
 	/// Peeks at the next token without consuming it.
-	fn peek_token(&self) -> Result<Option<Token>, String> {
+	fn peek_token(&self) -> Result<Option<Token>, Box<dyn Error>> {
 		// Make sure we don't go out of bounds
 		if self.position >= self.input.len() {
 			return Ok(None);
@@ -93,7 +95,7 @@ impl Tokenizer {
 		// If no match was found, return an error
 		if longest_length == 0 {
 			let next_char = self.input[self.position..].chars().next().unwrap();
-			return Err(format!("Unexpected character '{}' at line {}, column {}", next_char, line, column));
+			return Err(format!("Unexpected character '{}' at line {}, column {}", next_char, line, column).into());
 		}
 
 		// If a match was found, create a new token and update the position
@@ -115,7 +117,7 @@ impl Tokenizer {
 	}
 
 	/// Gets the next token from the current position in the input string while consuming it.
-	fn next_token(&mut self) -> Result<Option<Token>, String> {
+	fn next_token(&mut self) -> Result<Option<Token>, Box<dyn Error>> {
 
 		// Make sure we don't go out of bounds
 		if self.position >= self.input.len() {
@@ -150,7 +152,7 @@ impl Tokenizer {
 		// If no match was found, return an error
 		if longest_length == 0 {
 			let next_char = self.input[self.position..].chars().next().unwrap();
-			return Err(format!("Unexpected character '{}' at line {}, column {}", next_char, line, column));
+			return Err(format!("Unexpected character '{}' at line {}, column {}", next_char, line, column).into());
 		}
 
 		// If a match was found, create a new token and update the position

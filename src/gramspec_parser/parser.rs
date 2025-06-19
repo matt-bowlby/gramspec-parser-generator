@@ -1,10 +1,13 @@
-mod tokenizer;
 use std::collections::HashMap;
+use std::error::Error;
 
 use crate::gramspec_parser::token::{self, Token};
 use crate::gramspec_parser::token::token_type::TokenType;
 use crate::gramspec_parser::gramspec::GramSpec;
 use crate::gramspec_parser::gramspec::expression::Expression;
+use crate::gramspec_parser::gramspec::gramspec_config::GramSpecConfig;
+
+mod tokenizer;
 
 pub struct Parser {
 	tokenizer: tokenizer::Tokenizer,
@@ -24,7 +27,7 @@ impl Parser {
 		}
 	}
 
-	pub fn parse(&mut self) -> Result<GramSpec, String> {
+	pub fn parse(&mut self) -> Result<GramSpec, Box<dyn Error>> {
 		self.tokens = self.tokenizer.tokenize()?;
 		self.structures = self.structurize()?;
 		let mut rules: Vec<Structure> = Vec::new();
@@ -39,9 +42,9 @@ impl Parser {
 			}
 		}
 
-		let mut gram_spec = GramSpec {
+		let mut gramspec = GramSpec {
 			rules: HashMap::new(),
-			config_directives: HashMap::new(),
+			config: GramSpecConfig::new(),
 			meta_rules: HashMap::new(),
 		};
 
@@ -49,7 +52,7 @@ impl Parser {
 			let phrase = &rule.tokens[1..];
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
-			gram_spec.rules.insert(
+			gramspec.rules.insert(
 				rule.tokens[0].value.clone(),
 				expression
 			);
@@ -59,7 +62,7 @@ impl Parser {
 			let phrase = &meta_rule.tokens[1..];
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
-			gram_spec.meta_rules.insert(
+			gramspec.meta_rules.insert(
 				meta_rule.tokens[0].value.clone(),
 				expression
 			);
@@ -68,16 +71,16 @@ impl Parser {
 		for config_directive in &mut config_directives {
 			let directive_name = &config_directive.tokens[0].value;
 			let directive_value = &config_directive.tokens[1].value;
-			gram_spec.config_directives.insert(
+			gramspec.config.set(
 				directive_name.clone(),
 				directive_value.clone()
-			);
+			)?;
 		}
 
-		Ok(gram_spec)
+		Ok(gramspec)
 	}
 
-	fn structurize(&mut self) -> Result<Vec<Structure>, String> {
+	fn structurize(&mut self) -> Result<Vec<Structure>, Box<dyn Error>> {
 		let mut structures = Vec::new();
 		while self.position < self.tokens.len() {
 			let mut structure = Structure::new(
@@ -120,7 +123,7 @@ impl Parser {
 					line,
 					column,
 					self.tokens[self.position].token_type
-				));
+				).into());
 			}
 
 			// Set position to the end of the structure
@@ -131,7 +134,7 @@ impl Parser {
 		Ok(structures)
 	}
 
-	fn expect_config_directive(&mut self) -> Result<Option<Structure>, String> {
+	fn expect_config_directive(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
 		let mut structure = Structure::new(
 			Vec::new(),
 			StructureType::ConfigDirective
@@ -153,7 +156,7 @@ impl Parser {
 				"Expected config directive name at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read open paren token, don't bother adding it to the structure
@@ -164,7 +167,7 @@ impl Parser {
 				"Expected '(' at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read the config directive value token
@@ -176,7 +179,7 @@ impl Parser {
 				"Expected config directive value at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read close paren token, don't bother adding it to the structure
@@ -187,7 +190,7 @@ impl Parser {
 				"Expected ')' at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read endline token, don't bother adding it to the structure
@@ -198,13 +201,13 @@ impl Parser {
 				"Expected endline at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		Ok(Some(structure))
 	}
 
-	fn expect_rule_definition(&mut self) -> Result<Option<Structure>, String> {
+	fn expect_rule_definition(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
 		let mut structure = Structure::new(
 			Vec::new(),
 			StructureType::RuleDefinition
@@ -223,10 +226,10 @@ impl Parser {
 			self.position += 1;
 		} else {
 			return Err(format!(
-				"Expected '->' at position {}, found {:?}",
+				"Expected ':' at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read tokens until we reach a newline or end of input
@@ -242,7 +245,7 @@ impl Parser {
 		Ok(Some(structure))
 	}
 
-	fn expect_meta_rule_definition(&mut self) -> Result<Option<Structure>, String> {
+	fn expect_meta_rule_definition(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
 		let mut structure = Structure::new(
 			Vec::new(),
 			StructureType::MetaRuleDefinition
@@ -264,7 +267,7 @@ impl Parser {
 				"Expected meta rule name at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read the rule definition token, don't bother adding it to the structure
@@ -272,10 +275,10 @@ impl Parser {
 			self.position += 1;
 		} else {
 			return Err(format!(
-				"Expected '->' at position {}, found {:?}",
+				"Expected ':' at position {}, found {:?}",
 				self.tokens[self.position].position,
 				self.tokens[self.position].token_type
-			));
+			).into());
 		}
 
 		// Read tokens until we reach a newline or end of input
@@ -332,7 +335,7 @@ impl Parser {
 		final_
 	}
 
-	fn to_expression(&self, tokens: Vec<Token>) -> Result<Expression, String> {
+	fn to_expression(&self, tokens: Vec<Token>) -> Result<Expression, Box<dyn Error>> {
 
 		// Conversion from infix to postfix notation
 
@@ -382,7 +385,7 @@ impl Parser {
 				return Err(format!(
 					"Unmatched '(' at position {}",
 					top.position
-				));
+				).into());
 			}
 			postfix.push(top);
 		}
@@ -450,7 +453,7 @@ impl Parser {
 						return Err(format!(
 							"Expected RepeatOne or RepeatZero after DelimitRepeat at position {}",
 							token.position
-						));
+						).into());
 					}
 				}
 
@@ -459,7 +462,7 @@ impl Parser {
 						"Unexpected token {:?} at position {}",
 						token.token_type,
 						token.position
-					));
+					).into());
 				}
 			};
 
