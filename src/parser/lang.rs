@@ -1,5 +1,5 @@
-struct Lang {
-	name: String,
+pub struct Lang {
+	name: &'static str,
 	content: String,
 	position: usize,
 
@@ -7,7 +7,7 @@ struct Lang {
 }
 
 impl Lang {
-	pub fn new(name: String, content: String) -> Self {
+	pub fn new(name: &'static str, content: String) -> Self {
 		Lang { name, position: 0, content, marked_positions: Vec::new() }
 	}
 
@@ -16,7 +16,7 @@ impl Lang {
 	}
 
 	pub fn set_content(&mut self, content: String) {
-		&self.position = 0;
+		self.position = 0;
 		self.content = content;
 	}
 
@@ -29,7 +29,9 @@ impl Lang {
 	}
 
 	pub fn reset(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-		self.position = self.marked_positions.pop()?;
+		self.position = self.marked_positions.pop().ok_or::<Box<dyn std::error::Error>>(
+			format!("No marked position to reset to").into()
+		)?;
 		Ok(())
 	}
 }
