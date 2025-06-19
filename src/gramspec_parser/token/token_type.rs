@@ -51,6 +51,7 @@ pub enum TokenType {
 	Newline,
 }
 
+#[allow(dead_code)]
 impl TokenType {
 	/// Returns true if the token type is an operator.
 	pub fn is_operator(&self) -> bool {
