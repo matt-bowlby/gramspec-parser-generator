@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::gramspec_parser::token::Token;
+#[derive(Clone)]
 pub enum Expression {
 	RuleName(Token),
 	RegexLiteral(Token),

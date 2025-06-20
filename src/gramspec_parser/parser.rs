@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::gramspec_parser::token::{self, Token};
-use crate::gramspec_parser::token::token_type::TokenType;
-use crate::gramspec_parser::gramspec::GramSpec;
-use crate::gramspec_parser::gramspec::expression::Expression;
-use crate::gramspec_parser::gramspec::gramspec_config::GramSpecConfig;
+use crate::gramspec_parser::token;
+use crate::gramspec_parser::gramspec;
+use token::{Token, token_type::TokenType};
+use gramspec::{expression::Expression, GramSpec, gramspec_config::GramSpecConfig};
 
 mod tokenizer;
 
@@ -48,23 +47,27 @@ impl Parser {
 			meta_rules: HashMap::new(),
 		};
 
-		for rule in &mut rules {
+		// TODO: Check for rule duplicates and config directive duplicates
+
+		for rule in &rules {
 			let phrase = &rule.tokens[1..];
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
+			let alternatives = self.split_into_alternatives(&expression);
 			gramspec.rules.insert(
 				rule.tokens[0].value.clone(),
-				expression
+				alternatives
 			);
 		}
 
-		for meta_rule in &mut meta_rules {
+		for meta_rule in &meta_rules {
 			let phrase = &meta_rule.tokens[1..];
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
+			let alternatives = self.split_into_alternatives(&expression);
 			gramspec.meta_rules.insert(
 				meta_rule.tokens[0].value.clone(),
-				expression
+				alternatives
 			);
 		}
 
@@ -472,6 +475,17 @@ impl Parser {
 		}
 
 		Ok(operands.pop().unwrap())
+	}
+
+	fn split_into_alternatives(&self, expression: &Expression) -> Vec<Expression> {
+		match expression {
+			Expression::Or(left, right) => {
+				let mut alternatives = self.split_into_alternatives(left);
+				alternatives.extend(self.split_into_alternatives(right));
+				alternatives
+			},
+			_ => vec![expression.clone()],
+		}
 	}
 
 }

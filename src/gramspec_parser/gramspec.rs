@@ -6,7 +6,7 @@ use crate::gramspec_parser::gramspec::expression::Expression;
 use crate::gramspec_parser::gramspec::gramspec_config::GramSpecConfig;
 
 pub struct GramSpec {
-	pub rules: HashMap<String, Expression>,
+	pub rules: HashMap<String, Vec<Expression>>,
 	pub config: GramSpecConfig,
-	pub meta_rules: HashMap<String, Expression>,
+	pub meta_rules: HashMap<String, Vec<Expression>>,
 }
