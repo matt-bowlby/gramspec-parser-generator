@@ -1,5 +1,5 @@
-pub mod expression;
 pub mod gramspec_config;
+pub mod expression;
 
 use std::collections::HashMap;
 use crate::gramspec_parser::gramspec::expression::Expression;
