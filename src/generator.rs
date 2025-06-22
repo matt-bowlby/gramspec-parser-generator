@@ -22,28 +22,35 @@ impl Generator {
 	}
 
 	pub fn generate(&self, language_name: String) -> Result<String, Box<dyn Error>> {
-		let trimmed_language_name = language_name.trim().trim_matches(' ').to_string();
 		Ok(format!(
 
 		"{}\n\
 		pub mod node;\n\n\
 		mod expression;\n\
 		mod lang;\n\n\
+		#[allow(dead_code)]\n\
 		/// Generated Grammar Specification\n\
-		struct {} {{ }}\n\n\
-		impl {} {{\n\n\
+		pub struct Parser {{ }}\n\n\
+		#[allow(dead_code)]\n\
+		impl Parser {{\n\n\
 			\tpub fn new() -> Self {{\n\
-				\t\t{} {{ }}\n\
+				\t\tParser {{ }}\n\
 			\t}}\n\n\
 			\tpub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {{\n\
 				\t\tlet mut lang = Lang::new(\"{}\", input);\n\
 				\t\tself.{}(&mut lang)?;\n\
 				\t\tOk(None)\n\
 			\t}}\n\n\
+			\tpub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+				\t\tlet content = std::fs::read_to_string(file_path)?;\n\
+				\t\tself.parse(content)\n\
+			\t}}\n\n\
+			{}\
 			{}\
 			{}\
 		}}",
 
+		// Use Statements
 		{
 			let mut uses = String::from("");
 			for use_statement in USES {
@@ -51,10 +58,31 @@ impl Generator {
 			}
 			uses
 		},
-		trimmed_language_name,
-		trimmed_language_name,
-		trimmed_language_name, language_name,
+		language_name,
 		self.gramspec.config.entry_rule,
+		{
+			String::from(format!(
+
+			"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+				\t\tmatch rule_name {{\n\
+				{}\
+				\t\t\t_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),\n\
+				\t\t}}\n\
+			\t}}\n\n\
+			",
+
+			{
+				let mut cases = String::from("");
+				for rule in self.gramspec.rules.keys() {
+					cases.push_str(&format!(
+						"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
+					));
+				}
+				cases
+			}
+
+			))
+		},
 		{
 			let mut functions = String::from("");
 			for rule in self.gramspec.rules.keys() {
@@ -83,9 +111,11 @@ impl Generator {
 			.or_else(|| self.gramspec.meta_rules.get(rule_name))
 			.ok_or_else(|| format!("Rule '{}' not found", rule_name))?;
 
+
+		// TODO: Take longest alternative
 		Ok(format!(
 
-		"\tfn {}(&mut self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+		"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
 			\t\tlet mut node = Node::Rule(\"{}\".to_string(), Vec::new());\n\n\
 			{}\
 			\t\tOk(None)\n\
@@ -96,7 +126,7 @@ impl Generator {
 		{
 			let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
 			for alternative in token_expression {
-				alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang)? {{\n", self.to_conditional(alternative, true)?));
+				alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
 				alternatives.push_str("\t\t\tnode.extend(nodes);\n");
 				alternatives.push_str("\t\t\treturn Ok(Some(node));\n");
 				alternatives.push_str("\t\t}\n");
@@ -119,7 +149,7 @@ impl Generator {
 
 		Ok(format!(
 
-		"\tfn {}(&mut self, lang: &mut Lang) -> Result<Vec<Node>, Box<dyn Error>> {{\n\
+		"\tfn {}(&self, lang: &mut Lang) -> Result<Vec<Node>, Box<dyn Error>> {{\n\
 			\t\tlet mut nodes = Vec::new();\n\n\
 			{}\
 			\t\tOk(nodes)\n\
@@ -143,7 +173,7 @@ impl Generator {
 	fn to_conditional(&self, expression: &Expression, is_first: bool) -> Result<String, Box<dyn Error>> {
 		if is_first {
 			match expression {
-				Expression::RuleName(name) => Ok(format!("RuleName(\"{}\")", name.value)),
+				Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
 				Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
 				Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r\"{}\")", regex.value)),
 				Expression::StringLiteral(string) => Ok(format!("StringLiteral(\"{}\")", string.value)),
@@ -156,7 +186,7 @@ impl Generator {
 			}
 		} else {
 			match expression {
-				Expression::RuleName(name) => Ok(format!("Box::new(RuleName(\"{}\"))", name.value)),
+				Expression::RuleName(name) => Ok(format!("Box::new(Rule(\"{}\"))", name.value)),
 				Expression::Keyword(keyword) => Ok(format!("Box::new(Keyword(\"{}\"))", keyword.value)),
 				Expression::RegexLiteral(regex) => Ok(format!("Box::new(RegexLiteral(r\"{}\"))", regex.value)),
 				Expression::StringLiteral(string) => Ok(format!("Box::new(StringLiteral(\"{}\"))", string.value)),

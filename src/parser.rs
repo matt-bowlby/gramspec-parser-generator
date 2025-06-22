@@ -10,64 +10,77 @@ mod lang;
 
 #[allow(dead_code)]
 /// Generated Grammar Specification
-struct TestLanguage { }
+pub struct Parser { }
 
 #[allow(dead_code)]
-impl TestLanguage {
+impl Parser {
 
 	pub fn new() -> Self {
-		TestLanguage { }
+		Parser { }
 	}
 
 	pub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {
 		let mut lang = Lang::new("TestLanguage", input);
-		self.file(&mut lang)?;
-		Ok(None)
+		self.file(&mut lang)
 	}
 
-	fn test(&mut self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
-		let mut node = Node::Rule("test".to_string(), Vec::new());
+	pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {
+		let content = std::fs::read_to_string(file_path)?;
+		self.parse(content)
+	}
 
-		let start_pos = lang.position;
-		if let Some(nodes) = RegexLiteral(r"\d+").eval(lang)? {
-			node.extend(nodes);
-			return Ok(Some(node));
+	pub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
+		match rule_name {
+			"file" =>  return self.file(lang),
+			"hello" =>  return self.hello(lang),
+			"test" =>  return self.test(lang),
+			_ => Err(format!("Unknown rule: {}", rule_name).into()),
 		}
-		lang.position = start_pos;
-
-		Ok(None)
 	}
 
-	fn hello(&mut self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
-		let mut node = Node::Rule("hello".to_string(), Vec::new());
-
-		let start_pos = lang.position;
-		if let Some(nodes) = StringLiteral("yaga").eval(lang)? {
-			node.extend(nodes);
-			return Ok(Some(node));
-		}
-		lang.position = start_pos;
-
-		Ok(None)
-	}
-
-	fn file(&mut self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
+	pub(crate) fn file(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
 		let mut node = Node::Rule("file".to_string(), Vec::new());
 
 		let start_pos = lang.position;
-		if let Some(nodes) = DelimitRepeatOne(Box::new(RuleName("test")), Box::new(And(Box::new(StringLiteral("hello")), Box::new(RuleName("test"))))).eval(lang)? {
+		if let Some(nodes) = DelimitRepeatZero(Box::new(Rule("test")), Box::new(StringLiteral("hello"))).eval(lang, self)? {
 			node.extend(nodes);
 			return Ok(Some(node));
 		}
 		lang.position = start_pos;
 
-		if let Some(nodes) = RuleName("hello").eval(lang)? {
+		if let Some(nodes) = Rule("hello").eval(lang, self)? {
 			node.extend(nodes);
 			return Ok(Some(node));
 		}
 		lang.position = start_pos;
 
-		if let Some(nodes) = StringLiteral("bruh").eval(lang)? {
+		if let Some(nodes) = StringLiteral("bruh").eval(lang, self)? {
+			node.extend(nodes);
+			return Ok(Some(node));
+		}
+		lang.position = start_pos;
+
+		Ok(None)
+	}
+
+	pub(crate) fn hello(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
+		let mut node = Node::Rule("hello".to_string(), Vec::new());
+
+		let start_pos = lang.position;
+		if let Some(nodes) = StringLiteral("yaga").eval(lang, self)? {
+			node.extend(nodes);
+			return Ok(Some(node));
+		}
+		lang.position = start_pos;
+
+		Ok(None)
+	}
+
+	pub(crate) fn test(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {
+		let mut node = Node::Rule("test".to_string(), Vec::new());
+
+		let start_pos = lang.position;
+		if let Some(nodes) = RegexLiteral(r"\d+").eval(lang, self)? {
 			node.extend(nodes);
 			return Ok(Some(node));
 		}

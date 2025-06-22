@@ -4,10 +4,12 @@ use std::error::Error;
 use crate::parser::lang::Lang;
 use crate::parser::node::Node;
 
+use crate::parser::Parser;
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub enum Expression {
-	RuleName(&'static str),
+	Rule(&'static str),
 	RegexLiteral(&'static str),
 	StringLiteral(&'static str),
 	Keyword(&'static str),
@@ -23,7 +25,7 @@ pub enum Expression {
 impl fmt::Debug for Expression {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Expression::RuleName(rule) => write!(f, "{}", rule),
+			Expression::Rule(rule) => write!(f, "{}", rule),
 			Expression::RegexLiteral(regex) => write!(f, "\"{}\"", regex),
 			Expression::StringLiteral(string) => write!(f, "\'{}\'", string),
 			Expression::Keyword(keyword) => write!(f, "{}", keyword),
@@ -40,18 +42,24 @@ impl fmt::Debug for Expression {
 
 #[allow(dead_code)]
 impl Expression {
-	pub fn eval(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+	pub fn eval(&self, lang: &mut Lang, parser: &Parser) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		match self {
-			Expression::RuleName(rule) => lang.expect_string(rule),
+			Expression::Rule(rule) => {
+				if let Some(node) = parser.call_rule(rule, lang)? {
+					Ok(Some(vec![node]))
+				} else {
+					Ok(None)
+				}
+			},
 			Expression::RegexLiteral(regex) => lang.expect_regex(regex),
 			Expression::StringLiteral(string) => lang.expect_string(string),
 			Expression::Keyword(keyword) => lang.expect_keyword(keyword),
 			Expression::Or(left, right) => {
 				let start_pos = lang.position;
-				let left_nodes = left.eval(lang)?;
+				let left_nodes = left.eval(lang, parser)?;
 				let left_end = lang.position;
 				lang.position = start_pos;
-				let right_nodes = right.eval(lang)?;
+				let right_nodes = right.eval(lang, parser)?;
 				let right_end = lang.position;
 
 				if left_end > right_end {
@@ -66,11 +74,11 @@ impl Expression {
 				}
 			},
 			Expression::And(left, right) => {
-				let left_nodes = left.eval(lang)?;
+				let left_nodes = left.eval(lang, parser)?;
 				if left_nodes.is_none() {
 					return Ok(None);
 				}
-				let right_nodes = right.eval(lang)?;
+				let right_nodes = right.eval(lang, parser)?;
 				if right_nodes.is_none() {
 					return Ok(None);
 				}
@@ -80,9 +88,9 @@ impl Expression {
 			},
 			Expression::DelimitRepeatOne(expression, delimiter) => {
 				// Attempt to parse the first expression
-				let nodes = expression.eval(lang)?;
+				let nodes = expression.eval(lang, parser)?;
 				// If the first expression fails, return an empty vector
-				if nodes.is_none() || nodes.as_ref().ok_or(format!("nodes is None for DELIMIT_REPEAT_ONE at position {}", lang.position))?.is_empty() {
+				if nodes.is_none() {
 					return Ok(None);
 				}
 
@@ -91,13 +99,13 @@ impl Expression {
 				// Attempt to parse subsequent expressions with delimiters
 				loop {
 					// Attempt to parse the delimiter
-					let delimiter_nodes = delimiter.eval(lang)?;
+					let delimiter_nodes = delimiter.eval(lang, parser)?;
 					// If it fails, break the loop
 					if delimiter_nodes.is_none() {
 						break;
 					}
 					// Attempt to parse the next expression
-					let expression_nodes = expression.eval(lang)?;
+					let expression_nodes = expression.eval(lang, parser)?;
 					// If the next expression fails, break the loop
 					if expression_nodes.is_none() {
 						break;
@@ -113,9 +121,9 @@ impl Expression {
 			},
 			Expression::DelimitRepeatZero(left, right) => {
 				// Attempt to parse the first expression
-				let nodes = left.eval(lang)?;
+				let nodes = left.eval(lang, parser)?;
 				// If the first expression fails, return an empty vector
-				if nodes.is_none() || nodes.as_ref().unwrap().is_empty() {
+				if nodes.is_none() {
 					return Ok(Some(vec![]));
 				}
 
@@ -124,15 +132,15 @@ impl Expression {
 				// Attempt to parse subsequent expressions with delimiters
 				loop {
 					// Attempt to parse the delimiter
-					let delimiter_nodes = right.eval(lang)?;
+					let delimiter_nodes = right.eval(lang, parser)?;
 					// If it fails, break the loop
-					if delimiter_nodes.is_none() || delimiter_nodes.as_ref().unwrap().is_empty() {
+					if delimiter_nodes.is_none() {
 						break;
 					}
 					// Attempt to parse the next expression
-					let expression_nodes = left.eval(lang)?;
+					let expression_nodes = left.eval(lang, parser)?;
 					// If the next expression fails, break the loop
-					if expression_nodes.is_none() || expression_nodes.as_ref().unwrap().is_empty() {
+					if expression_nodes.is_none() {
 						break;
 					}
 
@@ -145,29 +153,29 @@ impl Expression {
 				Ok(Some(nodes))
 			},
 			Expression::RepeatOne(expr) => {
-				let mut nodes = expr.eval(lang)?;
+				let mut nodes = expr.eval(lang, parser)?;
 
 				if nodes.is_none() { return Ok(None); }
 
-				while let Some(new_nodes) = expr.eval(lang)? {
+				while let Some(new_nodes) = expr.eval(lang, parser)? {
 					nodes.as_mut().unwrap().extend(new_nodes);
 				}
 
 				Ok(nodes)
 			},
 			Expression::RepeatZero(expr) => {
-				let mut nodes = expr.eval(lang)?;
+				let mut nodes = expr.eval(lang, parser)?;
 
 				if nodes.is_none() { return Ok(Some(vec![])); }
 
-				while let Some(new_nodes) = expr.eval(lang)? {
+				while let Some(new_nodes) = expr.eval(lang, parser)? {
 					nodes.as_mut().unwrap().extend(new_nodes);
 				}
 
 				Ok(nodes)
 			},
 			Expression::Optional(expr) => {
-				let mut nodes = expr.eval(lang)?;
+				let mut nodes = expr.eval(lang, parser)?;
 
 				if nodes.is_none() {
 					nodes = Some(vec![]);
