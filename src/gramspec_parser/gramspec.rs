@@ -37,11 +37,10 @@ impl GramSpec {
 	pub fn add_meta_rule(&mut self, name: String, expressions: Vec<Expression>) {
 		self.meta_rules.insert(name, expressions);
 	}
-
 	pub fn is_left_circular(&self, rule_name: &str) -> bool {
-		let mut visited = HashSet::new();
-		if let Some(expressions) = self.rules.get(rule_name) {
+		if let Some(expressions) = self.get_expression(rule_name) {
 			for expr in expressions {
+				let mut visited = HashSet::new();
 				if self.is_left_circular_expression(rule_name, expr, &mut visited) {
 					return true;
 				}
@@ -66,7 +65,7 @@ impl GramSpec {
 
 				visited.insert(rule_name.to_string());
 
-				if let Some(expressions) = self.rules.get(rule_name) {
+				if let Some(expressions) = self.get_expression(rule_name) {
 					for expr in expressions {
 						if self.is_left_circular_expression(original_rule, expr, visited) {
 							visited.remove(rule_name);
