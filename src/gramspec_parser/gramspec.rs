@@ -10,3 +10,21 @@ pub struct GramSpec {
 	pub config: GramSpecConfig,
 	pub meta_rules: HashMap<String, Vec<Expression>>,
 }
+
+impl GramSpec {
+	pub fn new() -> Self {
+		Self {
+			rules: HashMap::new(),
+			config: GramSpecConfig::new(),
+			meta_rules: HashMap::new(),
+		}
+	}
+
+	pub fn add_rule(&mut self, name: String, expressions: Vec<Expression>) {
+		self.rules.insert(name, expressions);
+	}
+
+	pub fn add_meta_rule(&mut self, name: String, expressions: Vec<Expression>) {
+		self.meta_rules.insert(name, expressions);
+	}
+}

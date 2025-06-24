@@ -41,11 +41,7 @@ impl Parser {
 			}
 		}
 
-		let mut gramspec = GramSpec {
-			rules: HashMap::new(),
-			config: GramSpecConfig::new(),
-			meta_rules: HashMap::new(),
-		};
+		let mut gramspec = GramSpec::new();
 
 		// TODO: Check for rule duplicates and config directive duplicates
 
@@ -54,7 +50,7 @@ impl Parser {
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
 			let alternatives = self.split_into_alternatives(&expression);
-			gramspec.rules.insert(
+			gramspec.add_rule(
 				rule.tokens[0].value.clone(),
 				alternatives
 			);
@@ -65,7 +61,7 @@ impl Parser {
 			let and_phrase = &self.add_implict_ands(&phrase.to_vec());
 			let expression = self.to_expression(and_phrase.to_vec())?;
 			let alternatives = self.split_into_alternatives(&expression);
-			gramspec.meta_rules.insert(
+			gramspec.add_meta_rule(
 				meta_rule.tokens[0].value.clone(),
 				alternatives
 			);
