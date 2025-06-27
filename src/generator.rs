@@ -60,114 +60,120 @@ impl Generator {
 		},
 		language_name,
 		self.gramspec.config.entry_rule,
+		self.generate_call_rule(),
+		self.generate_rule_functions()?,
+		self.generate_meta_rule_functions()?,
+		))
+	}
+
+	fn generate_call_rule(&self) -> String {
+		String::from(format!(
+
+		"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+			\t\tmatch rule_name {{\n\
+			{}\
+			\t\t\t_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),\n\
+			\t\t}}\n\
+		\t}}\n\n\
+		",
+
 		{
-			String::from(format!(
-
-			"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
-				\t\tmatch rule_name {{\n\
-				{}\
-				\t\t\t_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),\n\
-				\t\t}}\n\
-			\t}}\n\n\
-			",
-
-			{
-				let mut cases = String::from("");
-				for rule in self.gramspec.rules.keys() {
-					cases.push_str(&format!(
-						"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
-					));
-				}
-				cases
-			}
-
-			))
-		},
-		{
-			let mut functions = String::from("");
+			let mut cases = String::from("");
 			for rule in self.gramspec.rules.keys() {
-				functions.push_str(&self.generate_rule_function(rule)?);
+				cases.push_str(&format!(
+					"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
+				));
 			}
-			functions
-		},
-		{
-			let mut meta_functions = String::from("");
-			for meta_rule in self.gramspec.meta_rules.keys() {
-				meta_functions.push_str(&self.generate_meta_rule_function(meta_rule)?);
-			}
-			meta_functions
+			cases
 		}
 
 		))
 	}
 
+	fn generate_rule_functions(&self) -> Result<String, Box<dyn Error>> {
+		let mut functions = String::from("");
+		for rule_name in self.gramspec.rules.keys() {
+			println!("Generating function for rule: {}", rule_name);
+			let token_expression = self.gramspec.rules.get(rule_name)
+				.or_else(|| self.gramspec.meta_rules.get(rule_name))
+				.ok_or_else(|| format!("Rule '{}' not found", rule_name))?;
 
-	fn generate_rule_function(
-		&self,
-		rule_name: &String
-	) -> Result<String, Box<dyn Error>> {
+			functions.push_str(format!(
 
-		let token_expression = self.gramspec.rules.get(rule_name)
-			.or_else(|| self.gramspec.meta_rules.get(rule_name))
-			.ok_or_else(|| format!("Rule '{}' not found", rule_name))?;
+			"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+				{}\
+				\t\tlet mut node = Node::Rule(\"{}\".to_string(), Vec::new());\n\n\
+				{}\
+				\t\tOk(None)\n\
+			\t}}\n\n",
 
+			rule_name,
+			{
+				if self.gramspec.is_left_circular(rule_name) {
+					print!("bruh");
+					format!("// Left recursive\n")
+				}else {
+					String::from("")
+				}
+			},
+			rule_name,
+			{
+				let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
+				for alternative in token_expression {
+					alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
+					alternatives.push_str("\t\t\tnode.extend(nodes);\n");
+					alternatives.push_str("\t\t\treturn Ok(Some(node));\n");
+					alternatives.push_str("\t\t}\n");
+					alternatives.push_str("\t\tlang.position = start_pos;\n\n");
+				}
+				alternatives
+			},
 
-		// TODO: Take longest alternative
-		Ok(format!(
-
-		"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
-			\t\tlet mut node = Node::Rule(\"{}\".to_string(), Vec::new());\n\n\
-			{}\
-			\t\tOk(None)\n\
-		\t}}\n\n",
-
-		rule_name,
-		rule_name,
-		{
-			let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
-			for alternative in token_expression {
-				alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
-				alternatives.push_str("\t\t\tnode.extend(nodes);\n");
-				alternatives.push_str("\t\t\treturn Ok(Some(node));\n");
-				alternatives.push_str("\t\t}\n");
-				alternatives.push_str("\t\tlang.position = start_pos;\n\n");
-			}
-			alternatives
-		},
-
-		))
+			).as_str());
+		}
+		Ok(functions)
 	}
 
-	fn generate_meta_rule_function(
-		&self,
-		rule_name: &String
-	) -> Result<String, Box<dyn Error>> {
+	fn generate_meta_rule_functions(&self) -> Result<String, Box<dyn Error>> {
+		let mut functions = String::from("");
+		for rule_name in self.gramspec.meta_rules.keys() {
+			let token_expression = self.gramspec.rules.get(rule_name)
+				.or_else(|| self.gramspec.meta_rules.get(rule_name))
+				.ok_or_else(|| format!("meta-rule '{}' not found", rule_name))?;
 
-		let token_expression = self.gramspec.rules.get(rule_name)
-			.or_else(|| self.gramspec.meta_rules.get(rule_name))
-			.ok_or_else(|| format!("meta-rule '{}' not found", rule_name))?;
+			functions.push_str(&format!(
 
-		Ok(format!(
+			"\tfn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
+				{}\
+				\t\tlet mut nodes = Vec::new();\n\n\
+				{}\
+				\t\tOk(None)\n\
+			\t}}\n\n",
 
-		"\tfn {}(&self, lang: &mut Lang) -> Result<Vec<Node>, Box<dyn Error>> {{\n\
-			\t\tlet mut nodes = Vec::new();\n\n\
-			{}\
-			\t\tOk(nodes)\n\
-		\t}}\n\n",
-
-		rule_name,
-		{
-			let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
-			for alternative in token_expression {
-				alternatives.push_str(&format!("\t\tif let Some(result_node) = {} {{\n", self.to_conditional(alternative, true)?));
-				alternatives.push_str("\t\t\treturn Ok(Some(result_node));\n");
-				alternatives.push_str("\t\t}\n");
-				alternatives.push_str("\t\tlang.position = start_pos;\n\n");
-			}
-			alternatives
-		},
-
-		))
+			rule_name,
+			{
+				if self.gramspec.is_left_circular(rule_name) {
+					print!("bruh");
+					format!("// Left recursive\n")
+				}else {
+					String::from("")
+				}
+			},
+			{
+				let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
+				for alternative in token_expression {
+					alternatives.push_str(&format!("\t\tif let Some(result_nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
+					alternatives.push_str("\t\t\tnodes.extend(result_nodes);\n");
+					alternatives.push_str("\t\t\treturn Ok(Some(nodes));\n");
+					alternatives.push_str("\t\t} else {\n");
+					alternatives.push_str("\t\t\tlang.position = start_pos;\n");
+					alternatives.push_str("\t\t}\n");
+				}
+				alternatives
+			},
+			));
+		}
+		Ok(functions)
 	}
 
 	fn to_conditional(&self, expression: &Expression, is_first: bool) -> Result<String, Box<dyn Error>> {
