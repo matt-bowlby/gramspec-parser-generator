@@ -45,8 +45,8 @@ impl Expression {
 	pub fn eval(&self, lang: &mut Lang, parser: &Parser) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		match self {
 			Expression::Rule(rule) => {
-				if let Some(node) = parser.call_rule(rule, lang)? {
-					Ok(Some(vec![node]))
+				if let Some(nodes) = parser.call_rule(rule, lang)? {
+					Ok(Some(nodes))
 				} else {
 					Ok(None)
 				}

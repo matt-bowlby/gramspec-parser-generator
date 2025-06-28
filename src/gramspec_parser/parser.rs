@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::error::Error;
 
 use crate::gramspec_parser::token;
 use crate::gramspec_parser::gramspec;
 use token::{Token, token_type::TokenType};
-use gramspec::{expression::Expression, GramSpec, gramspec_config::GramSpecConfig};
+use gramspec::{expression::Expression, GramSpec};
 
 mod tokenizer;
 

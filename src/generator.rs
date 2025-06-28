@@ -7,6 +7,8 @@ use crate::gramspec_parser::gramspec::GramSpec;
 
 const USES: &[&str] = &[
 	"use std::error::Error;",
+	"use std::collections::HashMap;",
+	"\n",
 	"use crate::parser::node::Node;",
 	"use crate::parser::lang::Lang;",
 	"use crate::parser::expression::Expression::*;",
@@ -30,15 +32,19 @@ impl Generator {
 		mod lang;\n\n\
 		#[allow(dead_code)]\n\
 		/// Generated Grammar Specification\n\
-		pub struct Parser {{ }}\n\n\
+		pub struct Parser {{\n\
+			\tmemos: HashMap<String, HashMap<String, Option<String>>>,\n\
+		 }}\n\n\
 		#[allow(dead_code)]\n\
 		impl Parser {{\n\n\
 			\tpub fn new() -> Self {{\n\
-				\t\tParser {{ }}\n\
+				\t\tParser {{ memos: HashMap::new() }}\n\
 			\t}}\n\n\
 			\tpub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {{\n\
 				\t\tlet mut lang = Lang::new(\"{}\", input);\n\
-				\t\tself.{}(&mut lang)?;\n\
+				\t\tif let Some(nodes) = self.{}(&mut lang)? {{\n\
+					\t\t\treturn Ok(Some(nodes[0].clone()));\n\
+				\t\t}}\n\
 				\t\tOk(None)\n\
 			\t}}\n\n\
 			\tpub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {{\n\
@@ -69,7 +75,7 @@ impl Generator {
 	fn generate_call_rule(&self) -> String {
 		String::from(format!(
 
-		"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+		"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
 			\t\tmatch rule_name {{\n\
 			{}\
 			\t\t\t_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),\n\
@@ -78,8 +84,14 @@ impl Generator {
 		",
 
 		{
-			let mut cases = String::from("");
+			let mut cases = String::from("\t\t\t// Regular Rules\n");
 			for rule in self.gramspec.rules.keys() {
+				cases.push_str(&format!(
+					"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
+				));
+			}
+			cases.push_str("\n\t\t\t// Meta Rules\n");
+			for rule in self.gramspec.meta_rules.keys() {
 				cases.push_str(&format!(
 					"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
 				));
@@ -100,7 +112,7 @@ impl Generator {
 
 			functions.push_str(format!(
 
-			"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Node>, Box<dyn Error>> {{\n\
+			"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
 				{}\
 				\t\tlet mut node = Node::Rule(\"{}\".to_string(), Vec::new());\n\n\
 				{}\
@@ -110,8 +122,7 @@ impl Generator {
 			rule_name,
 			{
 				if self.gramspec.is_left_circular(rule_name) {
-					print!("bruh");
-					format!("// Left recursive\n")
+					format!("\t\t// Left recursive\n")
 				}else {
 					String::from("")
 				}
@@ -122,7 +133,7 @@ impl Generator {
 				for alternative in token_expression {
 					alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
 					alternatives.push_str("\t\t\tnode.extend(nodes);\n");
-					alternatives.push_str("\t\t\treturn Ok(Some(node));\n");
+					alternatives.push_str("\t\t\treturn Ok(Some(vec![node]));\n");
 					alternatives.push_str("\t\t}\n");
 					alternatives.push_str("\t\tlang.position = start_pos;\n\n");
 				}
@@ -153,8 +164,7 @@ impl Generator {
 			rule_name,
 			{
 				if self.gramspec.is_left_circular(rule_name) {
-					print!("bruh");
-					format!("// Left recursive\n")
+					format!("\t\t// Left recursive\n")
 				}else {
 					String::from("")
 				}
