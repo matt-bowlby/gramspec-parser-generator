@@ -16,7 +16,7 @@ fn main() {
 	let gramspec = parser.parse().unwrap();
 	// Generate the parser code from the grammar specification
 	let generator = Generator::new(gramspec);
-	let output = generator.generate("TestLanguage".to_string()).unwrap();
+	let output = generator.generate().unwrap();
 	// Write the generated code to a file
 	fs::write("./src/parser.rs", output).unwrap();
 
