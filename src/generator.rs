@@ -26,35 +26,41 @@ impl Generator {
 	pub fn generate(&self, language_name: String) -> Result<String, Box<dyn Error>> {
 		Ok(format!(
 
-		"{}\n\
-		pub mod node;\n\n\
-		mod expression;\n\
-		mod lang;\n\n\
-		#[allow(dead_code)]\n\
-		/// Generated Grammar Specification\n\
-		pub struct Parser {{\n\
-			\tmemos: HashMap<String, HashMap<String, Option<String>>>,\n\
-		 }}\n\n\
-		#[allow(dead_code)]\n\
-		impl Parser {{\n\n\
-			\tpub fn new() -> Self {{\n\
-				\t\tParser {{ memos: HashMap::new() }}\n\
-			\t}}\n\n\
-			\tpub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {{\n\
-				\t\tlet mut lang = Lang::new(\"{}\", input);\n\
-				\t\tif let Some(nodes) = self.{}(&mut lang)? {{\n\
-					\t\t\treturn Ok(Some(nodes[0].clone()));\n\
-				\t\t}}\n\
-				\t\tOk(None)\n\
-			\t}}\n\n\
-			\tpub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {{\n\
-				\t\tlet content = std::fs::read_to_string(file_path)?;\n\
-				\t\tself.parse(content)\n\
-			\t}}\n\n\
-			{}\
-			{}\
-			{}\
-		}}",
+"{}
+pub mod node;
+mod expression;
+mod lang;
+
+#[allow(dead_code)]
+/// Generated Grammar Specification
+pub struct Parser {{
+	memos: HashMap<usize, HashMap<String, Box<Option<Vec<Node>>>>>,
+}}
+
+#[allow(dead_code)]
+impl Parser {{
+	pub fn new() -> Self {{
+		Parser {{ memos: HashMap::new() }}
+	}}
+
+	pub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {{
+		let mut lang = Lang::new(\"{}\", input);
+		if let Some(nodes) = self.{}(&mut lang)? {{
+			return Ok(Some(nodes[0].clone()));
+		}}
+		Ok(None)
+	}}
+
+	pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {{
+		let content = std::fs::read_to_string(file_path)?;
+		self.parse(content)
+	}}
+
+{}
+{}
+{}
+{}
+}}",
 
 		// Use Statements
 		{
@@ -66,38 +72,86 @@ impl Generator {
 		},
 		language_name,
 		self.gramspec.config.entry_rule,
+		self.generate_circular_wrapper(),
 		self.generate_call_rule(),
 		self.generate_rule_functions()?,
 		self.generate_meta_rule_functions()?,
 		))
 	}
 
+	fn generate_circular_wrapper(&self) -> String {
+		String::from(
+
+"	fn circular_wrapper(&mut self, lang: &mut Lang, rule_name: String) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+		let pos = lang.position;
+
+		if let Some(cached_result) = self.memos.get(&pos).and_then(|memo| memo.get(&rule_name)) {
+			lang.position = pos;
+			return Ok(*cached_result.clone());
+		}
+
+		self.memos.entry(pos).or_insert_with(HashMap::new).insert(rule_name.clone(), Box::new(None));
+
+		let mut last_result = None;
+		let mut last_pos = pos;
+
+		loop {
+			lang.position = pos;
+
+			let result = self.call_rule(&rule_name, lang)?;
+			let end_pos = lang.position;
+
+			if end_pos <= last_pos {
+				break;
+			}
+
+			last_result = result;
+			last_pos = end_pos;
+
+			if let Some(memo) = self.memos.get_mut(&pos) {
+				memo.insert(rule_name.clone(), Box::new(last_result.clone()));
+			}
+		}
+
+		lang.position = last_pos;
+		Ok(last_result)
+	}
+
+"
+		)
+	}
+
 	fn generate_call_rule(&self) -> String {
 		String::from(format!(
 
-		"\tpub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
-			\t\tmatch rule_name {{\n\
-			{}\
-			\t\t\t_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),\n\
-			\t\t}}\n\
-		\t}}\n\n\
-		",
+"	pub(crate) fn call_rule(&self, rule_name: &str, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+		match rule_name {{
+{}
+			_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),
+		}}
+	}}
 
-		{
-			let mut cases = String::from("\t\t\t// Regular Rules\n");
-			for rule in self.gramspec.rules.keys() {
-				cases.push_str(&format!(
-					"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
-				));
+",
+
+			{
+				let mut cases = String::from("\t\t\t// Regular Rules\n");
+				for rule in self.gramspec.rules.keys() {
+					cases.push_str(&format!(
+						"\t\t\t\"{}\" =>  return self.{}(lang),\n",
+						rule,
+						rule
+					));
+				}
+				cases.push_str("\t\t\t// Meta Rules\n");
+				for rule in self.gramspec.meta_rules.keys() {
+					cases.push_str(&format!(
+						"\t\t\t\"{}\" =>  return self.{}(lang),\n",
+						rule,
+						rule
+					));
+				}
+				cases
 			}
-			cases.push_str("\n\t\t\t// Meta Rules\n");
-			for rule in self.gramspec.meta_rules.keys() {
-				cases.push_str(&format!(
-					"\t\t\t\"{}\" =>  return self.{}(lang),\n", rule, rule
-				));
-			}
-			cases
-		}
 
 		))
 	}
@@ -105,20 +159,23 @@ impl Generator {
 	fn generate_rule_functions(&self) -> Result<String, Box<dyn Error>> {
 		let mut functions = String::from("");
 		for rule_name in self.gramspec.rules.keys() {
-			println!("Generating function for rule: {}", rule_name);
 			let token_expression = self.gramspec.rules.get(rule_name)
 				.or_else(|| self.gramspec.meta_rules.get(rule_name))
 				.ok_or_else(|| format!("Rule '{}' not found", rule_name))?;
 
 			functions.push_str(format!(
 
-			"\tpub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
-				{}\
-				\t\tlet mut node = Node::Rule(\"{}\".to_string(), Vec::new());\n\n\
-				{}\
-				\t\tOk(None)\n\
-			\t}}\n\n",
+"	pub(crate) fn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+		let start_pos = lang.position;
+		let mut node = Node::Rule(\"{}\".to_string(), Vec::new(), start_pos);
 
+{}
+{}		Ok(None)
+	}}
+
+",
+
+			rule_name,
 			rule_name,
 			{
 				if self.gramspec.is_left_circular(rule_name) {
@@ -127,15 +184,21 @@ impl Generator {
 					String::from("")
 				}
 			},
-			rule_name,
 			{
-				let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
+				let mut alternatives = String::from("");
 				for alternative in token_expression {
-					alternatives.push_str(&format!("\t\tif let Some(nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
-					alternatives.push_str("\t\t\tnode.extend(nodes);\n");
-					alternatives.push_str("\t\t\treturn Ok(Some(vec![node]));\n");
-					alternatives.push_str("\t\t}\n");
-					alternatives.push_str("\t\tlang.position = start_pos;\n\n");
+					alternatives.push_str(&format!(
+
+"		if let Some(nodes) = {}.eval(lang, self)? {{
+			node.extend(nodes);
+			return Ok(Some(vec![node]));
+		}}
+		lang.position = start_pos;
+
+",
+
+						self.to_conditional(alternative, true)?
+					));
 				}
 				alternatives
 			},
@@ -154,12 +217,15 @@ impl Generator {
 
 			functions.push_str(&format!(
 
-			"\tfn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{\n\
-				{}\
-				\t\tlet mut nodes = Vec::new();\n\n\
-				{}\
-				\t\tOk(None)\n\
-			\t}}\n\n",
+"	fn {}(&self, lang: &mut Lang) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+		let start_pos = lang.position;
+{}
+		let mut nodes = Vec::new();
+
+{}		Ok(None)
+	}}
+
+",
 
 			rule_name,
 			{
@@ -170,14 +236,20 @@ impl Generator {
 				}
 			},
 			{
-				let mut alternatives = String::from("\t\tlet start_pos = lang.position;\n");
+				let mut alternatives = String::from("");
 				for alternative in token_expression {
-					alternatives.push_str(&format!("\t\tif let Some(result_nodes) = {}.eval(lang, self)? {{\n", self.to_conditional(alternative, true)?));
-					alternatives.push_str("\t\t\tnodes.extend(result_nodes);\n");
-					alternatives.push_str("\t\t\treturn Ok(Some(nodes));\n");
-					alternatives.push_str("\t\t} else {\n");
-					alternatives.push_str("\t\t\tlang.position = start_pos;\n");
-					alternatives.push_str("\t\t}\n");
+					alternatives.push_str(&format!(
+
+"		if let Some(result_nodes) = {}.eval(lang, self)? {{
+			nodes.extend(result_nodes);
+			return Ok(Some(nodes));
+		}} else {{
+			lang.position = start_pos;
+		}}
+
+",
+						self.to_conditional(alternative, true)?
+					));
 				}
 				alternatives
 			},

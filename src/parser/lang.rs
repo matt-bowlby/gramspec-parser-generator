@@ -38,7 +38,7 @@ impl Lang {
 		let start_pos = self.position;
 		if self.content[self.position..].starts_with(string) {
 			self.position += string.len();
-			return Ok(Some(vec![Node::String(string.to_string())]));
+			return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
 		}
 		self.position = start_pos;
 		Ok(None)
@@ -49,7 +49,7 @@ impl Lang {
 		let start_pos = self.position;
 		if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
 			self.position += captures.get(0).unwrap().end();
-			return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string())]));
+			return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
 		}
 		self.position = start_pos;
 		Ok(None)
@@ -62,7 +62,7 @@ impl Lang {
 			.to_owned();
 		if self.content[self.position..].starts_with(&keyword_value) {
 			self.position += keyword_value.len();
-			return Ok(Some(vec![Node::String(keyword.to_string())]));
+			return Ok(Some(vec![Node::String(keyword.to_string(), start_pos)]));
 		}
 		self.position = start_pos;
 		Ok(None)
