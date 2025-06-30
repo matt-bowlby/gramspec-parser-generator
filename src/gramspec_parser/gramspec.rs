@@ -59,7 +59,7 @@ impl GramSpec {
 			Expression::RuleName(token) => {
 				let rule_name = &token.value;
 
-				if visited.contains(rule_name) && rule_name == original_rule {
+				if visited.contains(rule_name) || rule_name == original_rule {
 					return true;
 				}
 
