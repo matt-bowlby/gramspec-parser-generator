@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::collections::HashMap;
 use regex::Regex;
-use std::fmt;
+use std::{fmt, io::Write};
 
 use crate::parser::Expression::*;
 
@@ -114,12 +114,21 @@ impl Parser {
 		self.parse(content)
 	}
 
+	fn get_node_list_length(&self, nodes: &Vec<Node>) -> usize {
+		nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(0)
+	}
+
 	fn circular_wrapper(&mut self, rule_name: String) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		let pos = self.position;
 
 		if let Some(cached_result) = self.memos.get(&pos).and_then(|memo| memo.get(&rule_name)) {
-			self.position = pos;
-			return Ok(*cached_result.clone());
+			let content = cached_result.as_ref();
+			if let Some(nodes) = content {
+				self.position = self.get_node_list_length(nodes);
+				return Ok(Some(nodes.clone()));
+			} else {
+				return Ok(None);
+			}
 		}
 
 		self.memos.entry(pos).or_insert_with(HashMap::new).insert(rule_name.clone(), Box::new(None));
@@ -130,7 +139,7 @@ impl Parser {
 		loop {
 			self.position = pos;
 
-			let result = self.call_rule(&rule_name)?;
+			let result = self.call_rule(&rule_name, false)?;
 			let end_pos = self.position;
 
 			if end_pos <= last_pos {
@@ -193,7 +202,7 @@ impl Parser {
 	fn eval(&mut self, expression: &Expression) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		match expression {
 			Expression::Rule(rule) => {
-				if let Some(nodes) = self.call_rule(rule)? {
+				if let Some(nodes) = self.call_rule(rule, true)? {
 					Ok(Some(nodes))
 				} else {
 					Ok(None)
@@ -308,7 +317,6 @@ impl Parser {
 				while let Some(new_nodes) = self.eval(&*expr)? {
 					nodes.as_mut().unwrap().extend(new_nodes);
 				}
-
 				Ok(nodes)
 			},
 			Expression::RepeatZero(expr) => {
@@ -334,13 +342,27 @@ impl Parser {
 		}
 	}
 
-	fn call_rule(&mut self, rule_name: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+	fn call_rule(&mut self, rule_name: &str, protected: bool) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		match rule_name {
 			// Regular Rules
-			"file" =>  return self.file(),
-			"hello" =>  return self.hello(),
+			"file" => {
+				if protected {
+					self.circular_wrapper("file".to_string())
+				}
+				else {
+					self.file()
+				}
+			}
+			"test" => {
+				if protected {
+					self.circular_wrapper("test".to_string())
+				}
+				else {
+					self.test()
+				}
+			}
+			"hello" => self.hello(),
 			// Meta Rules
-			"test" =>  return self.test(),
 
 			_ => Err(format!("Unknown rule: {}", rule_name).into()),
 		}
@@ -349,60 +371,62 @@ impl Parser {
 
 	fn file(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		let start_pos = self.position;
-		let mut node = Node::Rule("file".to_string(), Vec::new(), start_pos);
+		let mut longest_end = start_pos;
+		let mut longest_node = None;
 
-		// Left recursive
-
-		if let Some(nodes) = self.eval(&DelimitRepeatZero(Box::new(Rule("test")), Box::new(StringLiteral("hello"))))? {
-			node.extend(nodes);
-			return Ok(Some(vec![node]));
-		}
 		self.position = start_pos;
-
-		if let Some(nodes) = self.eval(&Rule("hello"))? {
-			node.extend(nodes);
-			return Ok(Some(vec![node]));
+		if let Some(nodes) = self.eval(&RepeatOne(Box::new(Or(Box::new(Rule("test")), Box::new(StringLiteral("bruh"))))))? {
+			let node = Node::Rule("file".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {
+				longest_end = node.get_end_pos();
+				longest_node = Some(vec![node]);
+			}
 		}
-		self.position = start_pos;
 
-		if let Some(nodes) = self.eval(&StringLiteral("bruh"))? {
-			node.extend(nodes);
-			return Ok(Some(vec![node]));
+		Ok(longest_node)
+	}
+
+	fn test(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+		let start_pos = self.position;
+		let mut longest_end = start_pos;
+		let mut longest_node = None;
+
+		self.position = start_pos;
+		if let Some(nodes) = self.eval(&Rule("file"))? {
+			let node = Node::Rule("test".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {
+				longest_end = node.get_end_pos();
+				longest_node = Some(vec![node]);
+			}
 		}
-		self.position = start_pos;
 
-		Ok(None)
+		self.position = start_pos;
+		if let Some(nodes) = self.eval(&StringLiteral("a"))? {
+			let node = Node::Rule("test".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {
+				longest_end = node.get_end_pos();
+				longest_node = Some(vec![node]);
+			}
+		}
+
+		Ok(longest_node)
 	}
 
 	fn hello(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 		let start_pos = self.position;
-		let mut node = Node::Rule("hello".to_string(), Vec::new(), start_pos);
+		let mut longest_end = start_pos;
+		let mut longest_node = None;
 
-
-		if let Some(nodes) = self.eval(&StringLiteral("yaga"))? {
-			node.extend(nodes);
-			return Ok(Some(vec![node]));
-		}
 		self.position = start_pos;
-
-		Ok(None)
-	}
-
-
-	fn test(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
-		let start_pos = self.position;
-		// Left recursive
-
-		let mut nodes = Vec::new();
-
-		if let Some(result_nodes) = self.eval(&And(Box::new(Rule("file")), Box::new(RegexLiteral(r"\d+"))))? {
-			nodes.extend(result_nodes);
-			return Ok(Some(nodes));
-		} else {
-			self.position = start_pos;
+		if let Some(nodes) = self.eval(&StringLiteral("yaga"))? {
+			let node = Node::Rule("hello".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {
+				longest_end = node.get_end_pos();
+				longest_node = Some(vec![node]);
+			}
 		}
 
-		Ok(None)
+		Ok(longest_node)
 	}
 
 

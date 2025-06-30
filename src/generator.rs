@@ -152,7 +152,7 @@ impl Parser {{
 		loop {{
 			self.position = pos;
 
-			let result = self.call_rule(&rule_name)?;
+			let result = self.call_rule(&rule_name, false)?;
 			let end_pos = self.position;
 
 			if end_pos <= last_pos {{
@@ -215,7 +215,7 @@ impl Parser {{
 	fn eval(&mut self, expression: &Expression) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		match expression {{
 			Expression::Rule(rule) => {{
-				if let Some(nodes) = self.call_rule(rule)? {{
+				if let Some(nodes) = self.call_rule(rule, true)? {{
 					Ok(Some(nodes))
 				}} else {{
 					Ok(None)
@@ -355,7 +355,6 @@ impl Parser {{
 			}},
 		}}
 	}}
-
 {}
 {}
 {}
@@ -379,31 +378,67 @@ impl Parser {{
 	fn generate_call_rule(&self) -> String {
 		String::from(format!(
 
-"	fn call_rule(&mut self, rule_name: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+"
+	fn call_rule(&mut self, rule_name: &str, protected: bool) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		match rule_name {{
 {}
 			_ => Err(format!(\"Unknown rule: {{}}\", rule_name).into()),
 		}}
 	}}
-
 ",
 
 			{
 				let mut cases = String::from("\t\t\t// Regular Rules\n");
 				for rule in self.gramspec.rules.keys() {
-					cases.push_str(&format!(
-						"\t\t\t\"{}\" =>  return self.{}(),\n",
-						rule,
-						rule
-					));
+					if self.gramspec.is_left_circular(rule) {
+						cases.push_str(&format!(
+
+"			\"{}\" => {{
+				if protected {{
+					self.circular_wrapper(\"{}\".to_string())
+				}}
+				else {{
+					self.{}()
+				}}
+			}}
+",
+							rule,
+							rule,
+							rule
+						));
+					} else {
+						cases.push_str(&format!(
+							"\t\t\t\"{}\" => self.{}(),\n",
+							rule,
+							rule
+						));
+					}
 				}
 				cases.push_str("\t\t\t// Meta Rules\n");
 				for rule in self.gramspec.meta_rules.keys() {
-					cases.push_str(&format!(
-						"\t\t\t\"{}\" =>  return self.{}(),\n",
-						rule,
-						rule
-					));
+					if self.gramspec.is_left_circular(rule) {
+						cases.push_str(&format!(
+
+"			\"{}\" => {{
+				if protected {{
+					self.circular_wrapper(\"{}\".to_string())
+				}}
+				else {{
+					self.{}()
+				}}
+			}}
+",
+							rule,
+							rule,
+							rule
+						));
+					} else {
+						cases.push_str(&format!(
+							"\t\t\t\"{}\" => return self.{}(),\n",
+							rule,
+							rule
+						));
+					}
 				}
 				cases
 			}
@@ -420,39 +455,35 @@ impl Parser {{
 
 			functions.push_str(format!(
 
-"	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+"
+	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
-		let mut node = Node::Rule(\"{}\".to_string(), Vec::new(), start_pos);
+		let mut longest_end = start_pos;
+		let mut longest_node = None;
 
-{}
-{}		Ok(None)
+{}		Ok(longest_node)
 	}}
-
 ",
 
 			rule_name,
-			rule_name,
-			{
-				if self.gramspec.is_left_circular(rule_name) {
-					format!("\t\t// Left recursive\n")
-				}else {
-					String::from("")
-				}
-			},
 			{
 				let mut alternatives = String::from("");
 				for alternative in token_expression {
 					alternatives.push_str(&format!(
 
-"		if let Some(nodes) = self.eval(&{})? {{
-			node.extend(nodes);
-			return Ok(Some(vec![node]));
+"		self.position = start_pos;
+		if let Some(nodes) = self.eval(&{})? {{
+			let node = Node::Rule(\"{}\".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {{
+				longest_end = node.get_end_pos();
+				longest_node = Some(vec![node]);
+			}}
 		}}
-		self.position = start_pos;
 
 ",
 
-						self.to_conditional(alternative, true)?
+						self.to_conditional(alternative, true)?,
+						rule_name
 					));
 				}
 				alternatives
@@ -472,38 +503,34 @@ impl Parser {{
 
 			functions.push_str(&format!(
 
-"	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+"
+	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
-{}
-		let mut nodes = Vec::new();
+		let mut longest_end = start_pos;
+		let mut longest_nodes = None;
 
-{}		Ok(None)
+{}		Ok(longest_nodes)
 	}}
-
 ",
 
 			rule_name,
-			{
-				if self.gramspec.is_left_circular(rule_name) {
-					format!("\t\t// Left recursive\n")
-				}else {
-					String::from("")
-				}
-			},
 			{
 				let mut alternatives = String::from("");
 				for alternative in token_expression {
 					alternatives.push_str(&format!(
 
-"		if let Some(result_nodes) = self.eval(&{})? {{
-			nodes.extend(result_nodes);
-			return Ok(Some(nodes));
-		}} else {{
-			self.position = start_pos;
+"		self.position = start_pos;
+		if let Some(result_nodes) = self.eval(&{})? {{
+			let node = Node::Rule(\"{}\".to_string(), result_nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
+			if node.get_end_pos() > longest_end {{
+				longest_end = node.get_end_pos();
+				longest_nodes = Some(result_nodes);
+			}}
 		}}
 
 ",
-						self.to_conditional(alternative, true)?
+						self.to_conditional(alternative, true)?,
+						rule_name
 					));
 				}
 				alternatives
@@ -525,6 +552,9 @@ impl Parser {{
 				Expression::DelimitRepeatOne(left, right) => Ok(format!("DelimitRepeatOne({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
 				Expression::DelimitRepeatZero(left, right) => Ok(format!("DelimitRepeatZero({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
 				Expression::Optional(expr) => Ok(format!("Optional({})", self.to_conditional(expr, false)?)),
+				Expression::RepeatOne(expr) => Ok(format!("RepeatOne({})", self.to_conditional(expr, false)?)),
+				Expression::RepeatZero(expr) => Ok(format!("RepeatZero({})", self.to_conditional(expr, false)?)),
+
 				_ => Err(format!("Unsupported expression type in rule generation").into()),
 			}
 		} else {
@@ -538,6 +568,8 @@ impl Parser {{
 				Expression::DelimitRepeatOne(left, right) => Ok(format!("Box::new(DelimitRepeatOne({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
 				Expression::DelimitRepeatZero(left, right) => Ok(format!("Box::new(DelimitRepeatZero({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
 				Expression::Optional(expr) => Ok(format!("Box::new(Optional({}))", self.to_conditional(expr, false)?)),
+				Expression::RepeatOne(expr) => Ok(format!("Box::new(RepeatOne({}))", self.to_conditional(expr, false)?)),
+				Expression::RepeatZero(expr) => Ok(format!("Box::new(RepeatZero({}))", self.to_conditional(expr, false)?)),
 				_ => Err(format!("Unsupported expression type in rule generation").into()),
 			}
 		}
