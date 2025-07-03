@@ -14,6 +14,61 @@ const USES: &[&str] = &[
 	"use crate::parser::Expression::*;",
 ];
 
+const RESERVED_KEYWORDS: &[&str] = &[
+	"as",
+	"break",
+	"const",
+	"continue",
+	"crate",
+	"else",
+	"enum",
+	"extern",
+	"false",
+	"fn",
+	"for",
+	"if",
+	"impl",
+	"in",
+	"let",
+	"loop",
+	"match",
+	"mod",
+	"move",
+	"mut",
+	"pub",
+	"ref",
+	"return",
+	"self",
+	"Self",
+	"static",
+	"struct",
+	"super",
+	"trait",
+	"true",
+	"type",
+	"unsafe",
+	"use",
+	"where",
+	"while",
+	"async",
+	"await",
+	"dyn",
+	"abstract",
+	"become",
+	"box",
+	"do",
+	"final",
+	"macro",
+	"override",
+	"priv",
+	"typeof",
+	"unsized",
+	"virtual",
+	"yield",
+	"try",
+	"gen",
+];
+
 pub struct Generator {
 	gramspec: GramSpec,
 }
@@ -54,6 +109,15 @@ impl Node {{
 		// Extend the current node with the provided children
 		for child in children {{
 			self.append(child);
+		}}
+	}}
+
+	pub fn set_children(&mut self, children: Vec<Node>) {{
+		match self {{
+			Node::Rule(name, _, start_pos) => {{
+				*self = Node::Rule(name.to_string(), children.into_iter().map(|n| Box::new(n)).collect(), *start_pos);
+			}},
+			_ => return,
 		}}
 	}}
 
@@ -104,6 +168,31 @@ impl fmt::Debug for Expression {{
 			Expression::RepeatOne(expr) => write!(f, \"({{:?}})+\", expr),
 			Expression::RepeatZero(expr) => write!(f, \"({{:?}})*\", expr),
 		}}
+	}}
+}}
+
+#[allow(dead_code)]
+impl Expression {{
+    pub fn or(left: Expression, right: Expression) -> Self {{
+        Expression::Or(Box::new(left), Box::new(right))
+	}}
+    pub fn and(left: Expression, right: Expression) -> Self {{
+        Expression::And(Box::new(left), Box::new(right))
+	}}
+    pub fn delimit_repeat_one(left: Expression, right: Expression) -> Self {{
+        Expression::DelimitRepeatOne(Box::new(left), Box::new(right))
+	}}
+    pub fn delimit_repeat_zero(left: Expression, right: Expression) -> Self {{
+        Expression::DelimitRepeatZero(Box::new(left), Box::new(right))
+	}}
+    pub fn optional(expr: Expression) -> Self {{
+        Expression::Optional(Box::new(expr))
+	}}
+    pub fn repeat_one(expr: Expression) -> Self {{
+        Expression::RepeatOne(Box::new(expr))
+	}}
+    pub fn repeat_zero(expr: Expression) -> Self {{
+        Expression::RepeatZero(Box::new(expr))
 	}}
 }}
 
@@ -355,6 +444,31 @@ impl Parser {{
 			}},
 		}}
 	}}
+
+	fn get_longest_expression_match(&mut self, expressions: &[Expression]) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
+		let start_pos = self.position;
+		let mut longest_end = start_pos;
+		let mut longest_nodes = Vec::new();
+
+		for expr in expressions.iter() {{
+			if let Some(nodes) = self.eval(&expr)? {{
+				self.position = start_pos; // Reset position to start for each expression evaluation
+				let new_end_pos = nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(start_pos);
+				if new_end_pos > longest_end {{
+					longest_end = new_end_pos;
+					longest_nodes = nodes;
+				}}
+			}}
+		}}
+		if longest_nodes.is_empty() {{
+			self.position = start_pos; // Reset position if no matches found
+			Ok(None)
+		}}else {{
+			self.position = longest_end; // Update position to the end of the longest match
+			Ok(Some(longest_nodes))
+		}}
+	}}
+
 {}
 {}
 {}
@@ -404,13 +518,21 @@ impl Parser {{
 ",
 							rule,
 							rule,
-							rule
+							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
+								format!("_{}", rule)
+							} else {
+								rule.to_string()
+							}
 						));
 					} else {
 						cases.push_str(&format!(
 							"\t\t\t\"{}\" => self.{}(),\n",
 							rule,
-							rule
+							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
+								format!("_{}", rule)
+							} else {
+								rule.to_string()
+							}
 						));
 					}
 				}
@@ -430,13 +552,21 @@ impl Parser {{
 ",
 							rule,
 							rule,
-							rule
+							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
+								format!("_{}", rule)
+							} else {
+								rule.to_string()
+							}
 						));
 					} else {
 						cases.push_str(&format!(
 							"\t\t\t\"{}\" => return self.{}(),\n",
 							rule,
-							rule
+							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
+								format!("_{}", rule)
+							} else {
+								rule.to_string()
+							}
 						));
 					}
 				}
@@ -458,36 +588,40 @@ impl Parser {{
 "
 	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
-		let mut longest_end = start_pos;
-		let mut longest_node = None;
+		let expressions: [Expression; {}] = [
+{}		];
 
-{}		Ok(longest_node)
+		if let Some(matches) = self.get_longest_expression_match(&expressions)? {{
+			let mut node = Node::Rule(\"{}\".to_string(), Vec::new(), start_pos);
+			node.set_children(matches);
+			return Ok(Some(vec![node]));
+		}}
+
+		Ok(None)
 	}}
 ",
 
-			rule_name,
+			// Function Name: Prefix with underscore if it's a reserved keyword
+			if RESERVED_KEYWORDS.contains(&rule_name.as_str()) {
+				format!("_{}", rule_name)
+			} else {
+				rule_name.to_string()
+			},
+
+			// Number of alternatives; used for array length
+			token_expression.len(),
+
+			// Generate the alternative expressions
 			{
 				let mut alternatives = String::from("");
 				for alternative in token_expression {
-					alternatives.push_str(&format!(
-
-"		self.position = start_pos;
-		if let Some(nodes) = self.eval(&{})? {{
-			let node = Node::Rule(\"{}\".to_string(), nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
-			if node.get_end_pos() > longest_end {{
-				longest_end = node.get_end_pos();
-				longest_node = Some(vec![node]);
-			}}
-		}}
-
-",
-
-						self.to_conditional(alternative, true)?,
-						rule_name
-					));
+					alternatives.push_str(&format!("\t\t\t{},\n", self.to_conditional(alternative)?));
 				}
 				alternatives
 			},
+
+			// Rule name for the Node
+			rule_name,
 
 			).as_str());
 		}
@@ -505,73 +639,50 @@ impl Parser {{
 
 "
 	fn {}(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
-		let start_pos = self.position;
-		let mut longest_end = start_pos;
-		let mut longest_nodes = None;
+		let expressions: [Expression; {}] = [
+{}		];
 
-{}		Ok(longest_nodes)
+		self.get_longest_expression_match(&expressions)
 	}}
 ",
 
-			rule_name,
+			// Function Name: Prefix with underscore if it's a reserved keyword
+			if RESERVED_KEYWORDS.contains(&rule_name.as_str()) {
+				format!("_{}", rule_name)
+			} else {
+				rule_name.to_string()
+			},
+
+			// Number of alternatives; used for array length
+			token_expression.len(),
+
+			// Generate the alternative expressions
 			{
 				let mut alternatives = String::from("");
 				for alternative in token_expression {
-					alternatives.push_str(&format!(
-
-"		self.position = start_pos;
-		if let Some(result_nodes) = self.eval(&{})? {{
-			let node = Node::Rule(\"{}\".to_string(), result_nodes.iter().map(|n| Box::new(n.to_owned())).collect(), start_pos);
-			if node.get_end_pos() > longest_end {{
-				longest_end = node.get_end_pos();
-				longest_nodes = Some(result_nodes);
-			}}
-		}}
-
-",
-						self.to_conditional(alternative, true)?,
-						rule_name
-					));
+					alternatives.push_str(&format!("\t\t\t{},\n", self.to_conditional(alternative)?));
 				}
 				alternatives
 			},
-			));
+
+			).as_str());
 		}
 		Ok(functions)
 	}
 
-	fn to_conditional(&self, expression: &Expression, is_first: bool) -> Result<String, Box<dyn Error>> {
-		if is_first {
-			match expression {
-				Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
-				Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
-				Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r\"{}\")", regex.value)),
-				Expression::StringLiteral(string) => Ok(format!("StringLiteral(\"{}\")", string.value)),
-				Expression::Or(left, right) => Ok(format!("Or({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::And(left, right) => Ok(format!("And({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::DelimitRepeatOne(left, right) => Ok(format!("DelimitRepeatOne({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::DelimitRepeatZero(left, right) => Ok(format!("DelimitRepeatZero({}, {})", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::Optional(expr) => Ok(format!("Optional({})", self.to_conditional(expr, false)?)),
-				Expression::RepeatOne(expr) => Ok(format!("RepeatOne({})", self.to_conditional(expr, false)?)),
-				Expression::RepeatZero(expr) => Ok(format!("RepeatZero({})", self.to_conditional(expr, false)?)),
-
-				_ => Err(format!("Unsupported expression type in rule generation").into()),
-			}
-		} else {
-			match expression {
-				Expression::RuleName(name) => Ok(format!("Box::new(Rule(\"{}\"))", name.value)),
-				Expression::Keyword(keyword) => Ok(format!("Box::new(Keyword(\"{}\"))", keyword.value)),
-				Expression::RegexLiteral(regex) => Ok(format!("Box::new(RegexLiteral(r\"{}\"))", regex.value)),
-				Expression::StringLiteral(string) => Ok(format!("Box::new(StringLiteral(\"{}\"))", string.value)),
-				Expression::Or(left, right) => Ok(format!("Box::new(Or({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::And(left, right) => Ok(format!("Box::new(And({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::DelimitRepeatOne(left, right) => Ok(format!("Box::new(DelimitRepeatOne({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::DelimitRepeatZero(left, right) => Ok(format!("Box::new(DelimitRepeatZero({}, {}))", self.to_conditional(left, false)?, self.to_conditional(right, false)?)),
-				Expression::Optional(expr) => Ok(format!("Box::new(Optional({}))", self.to_conditional(expr, false)?)),
-				Expression::RepeatOne(expr) => Ok(format!("Box::new(RepeatOne({}))", self.to_conditional(expr, false)?)),
-				Expression::RepeatZero(expr) => Ok(format!("Box::new(RepeatZero({}))", self.to_conditional(expr, false)?)),
-				_ => Err(format!("Unsupported expression type in rule generation").into()),
-			}
+	fn to_conditional(&self, expression: &Expression) -> Result<String, Box<dyn Error>> {
+		match expression {
+			Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
+			Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
+			Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r#\"{}\"#)", regex.value)),
+			Expression::StringLiteral(string) => Ok(format!("StringLiteral(r#\"{}\"#)", string.value)),
+			Expression::Or(left, right) => Ok(format!("Expression::or({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
+			Expression::And(left, right) => Ok(format!("Expression::and({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
+			Expression::DelimitRepeatOne(left, right) => Ok(format!("Expression::delimit_repeat_one({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
+			Expression::DelimitRepeatZero(left, right) => Ok(format!("Expression::delimit_repeat_zero({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
+			Expression::Optional(expr) => Ok(format!("Expression::optional({})", self.to_conditional(expr)?)),
+			Expression::RepeatOne(expr) => Ok(format!("Expression::repeat_one({})", self.to_conditional(expr)?)),
+			Expression::RepeatZero(expr) => Ok(format!("Expression::repeat_zero({})", self.to_conditional(expr)?)),
 		}
 	}
 }
