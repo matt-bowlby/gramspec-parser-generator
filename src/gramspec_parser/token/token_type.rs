@@ -4,8 +4,8 @@ use regex::Regex;
 lazy_static! {
     static ref RULE_NAME_REGEX: Regex = Regex::new(r"^[a-z_][a-z0-9_]*").unwrap();
     static ref KEYWORD_REGEX: Regex = Regex::new(r"^[A-Z_][A-Z0-9_]*").unwrap();
-    static ref REGEX_LITERAL_REGEX: Regex = Regex::new(r#"^"[^"\r\n]*""#).unwrap();
-    static ref STRING_LITERAL_REGEX: Regex = Regex::new(r"^'[^'\r\n]*'").unwrap();
+    static ref REGEX_LITERAL_REGEX: Regex = Regex::new(r"^r'([^'\\]|\\.)*'").unwrap();
+    static ref STRING_LITERAL_REGEX: Regex = Regex::new(r"^'([^'\\]|\\.)*'").unwrap();
     static ref OR_REGEX: Regex = Regex::new(r"^\|").unwrap();
     static ref AND_REGEX: Regex = Regex::new(r"^&").unwrap();
     static ref DELIMIT_REPEAT_REGEX: Regex = Regex::new(r"^,").unwrap();
@@ -117,7 +117,7 @@ impl TokenType {
     pub fn transform(&self, value: &String) -> String {
 		match self {
 			TokenType::RegexLiteral => {
-				value.trim_matches('\"').to_string()
+				value.strip_prefix('r').unwrap().trim_matches('\'').to_string()
 			}
 			TokenType::StringLiteral => {
 				value.trim_matches('\'').to_string()
@@ -129,10 +129,10 @@ impl TokenType {
 
 	pub fn all() -> Vec<TokenType> {
         vec![
-            TokenType::RuleName,
-			TokenType::Keyword,
 			TokenType::RegexLiteral,
 			TokenType::StringLiteral,
+            TokenType::RuleName,
+			TokenType::Keyword,
 
 			// Operators
 			TokenType::Or,
