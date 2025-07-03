@@ -14,61 +14,6 @@ const USES: &[&str] = &[
 	"use crate::parser::Expression::*;",
 ];
 
-const RESERVED_KEYWORDS: &[&str] = &[
-	"as",
-	"break",
-	"const",
-	"continue",
-	"crate",
-	"else",
-	"enum",
-	"extern",
-	"false",
-	"fn",
-	"for",
-	"if",
-	"impl",
-	"in",
-	"let",
-	"loop",
-	"match",
-	"mod",
-	"move",
-	"mut",
-	"pub",
-	"ref",
-	"return",
-	"self",
-	"Self",
-	"static",
-	"struct",
-	"super",
-	"trait",
-	"true",
-	"type",
-	"unsafe",
-	"use",
-	"where",
-	"while",
-	"async",
-	"await",
-	"dyn",
-	"abstract",
-	"become",
-	"box",
-	"do",
-	"final",
-	"macro",
-	"override",
-	"priv",
-	"typeof",
-	"unsized",
-	"virtual",
-	"yield",
-	"try",
-	"gen",
-];
-
 pub struct Generator {
 	gramspec: GramSpec,
 }
@@ -518,21 +463,13 @@ impl Parser {{
 ",
 							rule,
 							rule,
-							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
-								format!("_{}", rule)
-							} else {
-								rule.to_string()
-							}
+							format!("_{}", rule)
 						));
 					} else {
 						cases.push_str(&format!(
 							"\t\t\t\"{}\" => self.{}(),\n",
 							rule,
-							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
-								format!("_{}", rule)
-							} else {
-								rule.to_string()
-							}
+							format!("_{}", rule)
 						));
 					}
 				}
@@ -552,21 +489,13 @@ impl Parser {{
 ",
 							rule,
 							rule,
-							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
-								format!("_{}", rule)
-							} else {
-								rule.to_string()
-							}
+							format!("_{}", rule)
 						));
 					} else {
 						cases.push_str(&format!(
 							"\t\t\t\"{}\" => return self.{}(),\n",
 							rule,
-							if RESERVED_KEYWORDS.contains(&rule.as_str()) {
-								format!("_{}", rule)
-							} else {
-								rule.to_string()
-							}
+							format!("_{}", rule)
 						));
 					}
 				}
@@ -578,10 +507,10 @@ impl Parser {{
 
 	fn generate_rule_functions(&self) -> Result<String, Box<dyn Error>> {
 		let mut functions = String::from("");
-		for rule_name in self.gramspec.rules.keys() {
-			let token_expression = self.gramspec.rules.get(rule_name)
-				.or_else(|| self.gramspec.meta_rules.get(rule_name))
-				.ok_or_else(|| format!("Rule '{}' not found", rule_name))?;
+		for rule in self.gramspec.rules.keys() {
+			let token_expression = self.gramspec.rules.get(rule)
+				.or_else(|| self.gramspec.meta_rules.get(rule))
+				.ok_or_else(|| format!("Rule '{}' not found", rule))?;
 
 			functions.push_str(format!(
 
@@ -601,12 +530,8 @@ impl Parser {{
 	}}
 ",
 
-			// Function Name: Prefix with underscore if it's a reserved keyword
-			if RESERVED_KEYWORDS.contains(&rule_name.as_str()) {
-				format!("_{}", rule_name)
-			} else {
-				rule_name.to_string()
-			},
+			// Function Name: Prefix with underscore
+			format!("_{}", rule),
 
 			// Number of alternatives; used for array length
 			token_expression.len(),
@@ -621,7 +546,7 @@ impl Parser {{
 			},
 
 			// Rule name for the Node
-			rule_name,
+			rule,
 
 			).as_str());
 		}
@@ -630,10 +555,10 @@ impl Parser {{
 
 	fn generate_meta_rule_functions(&self) -> Result<String, Box<dyn Error>> {
 		let mut functions = String::from("");
-		for rule_name in self.gramspec.meta_rules.keys() {
-			let token_expression = self.gramspec.rules.get(rule_name)
-				.or_else(|| self.gramspec.meta_rules.get(rule_name))
-				.ok_or_else(|| format!("meta-rule '{}' not found", rule_name))?;
+		for rule in self.gramspec.meta_rules.keys() {
+			let token_expression = self.gramspec.rules.get(rule)
+				.or_else(|| self.gramspec.meta_rules.get(rule))
+				.ok_or_else(|| format!("meta-rule '{}' not found", rule))?;
 
 			functions.push_str(&format!(
 
@@ -647,11 +572,7 @@ impl Parser {{
 ",
 
 			// Function Name: Prefix with underscore if it's a reserved keyword
-			if RESERVED_KEYWORDS.contains(&rule_name.as_str()) {
-				format!("_{}", rule_name)
-			} else {
-				rule_name.to_string()
-			},
+			format!("_{}", rule),
 
 			// Number of alternatives; used for array length
 			token_expression.len(),
