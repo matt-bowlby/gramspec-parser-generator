@@ -13,7 +13,10 @@ fn main() {
 	// // Tokenize the grammar specification
 	// let mut parser = Parser::new(gramspec);
 	// // Tokenize the input string
-	// let gramspec = parser.parse().unwrap();
+	// let gramspec = parser.parse().unwrap_or_else(|err| {
+	// 	eprintln!("Error parsing grammar specification: {}", err);
+	// 	std::process::exit(1);
+	// });
 	// // Generate the parser code from the grammar specification
 	// let generator = Generator::new(gramspec);
 	// let output = generator.generate().unwrap();

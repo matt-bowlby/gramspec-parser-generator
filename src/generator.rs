@@ -427,7 +427,7 @@ impl Parser {{
 			}
 			uses
 		},
-		self.gramspec.config.entry_rule,
+		format!("_{}", self.gramspec.config.entry_rule),
 		self.generate_call_rule(),
 		self.generate_rule_functions()?,
 		self.generate_meta_rule_functions()?,
