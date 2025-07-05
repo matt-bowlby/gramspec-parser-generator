@@ -6,12 +6,15 @@ use crate::gramspec_parser::gramspec::GramSpec;
 // use crate::gramspec_parser::token::token_type::TokenType;
 
 const USES: &[&str] = &[
+	"mod expression;",
+	"mod node;",
+	"",
 	"use std::error::Error;",
 	"use std::collections::HashMap;",
 	"use regex::Regex;",
-	"use std::fmt;",
 	"",
-	"use crate::parser::Expression::*;",
+	"use expression::Expression::{self, *};",
+	"use node::Node;",
 ];
 
 pub struct Generator {
@@ -30,116 +33,6 @@ impl Generator {
 const KEYWORDS: &[(&str, &str)] = &[
 	(\"ENDMARKER\", \"0\"),
 ];
-
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum Node {{
-	Rule(String, Vec<Box<Node>>, usize),
-	String(String, usize),
-}}
-
-#[allow(dead_code)]
-impl Node {{
-	pub fn append(&mut self, child: Node) {{
-		match self {{
-			Node::Rule(_, children, _) => children.push(Box::new(child)),
-			_ => return,
-		}}
-	}}
-
-	pub fn extend(&mut self, children: Vec<Node>) {{
-		// Only extend if the current node can be extended
-		if !matches!(self, Node::Rule(_, _, _)) {{ return; }}
-
-		// Extend the current node with the provided children
-		for child in children {{
-			self.append(child);
-		}}
-	}}
-
-	pub fn set_children(&mut self, children: Vec<Node>) {{
-		match self {{
-			Node::Rule(name, _, start_pos) => {{
-				*self = Node::Rule(name.to_string(), children.into_iter().map(|n| Box::new(n)).collect(), *start_pos);
-			}},
-			_ => return,
-		}}
-	}}
-
-	pub fn get_end_pos(&self) -> usize {{
-		match self {{
-			Node::Rule(_, nodes, start_pos) => {{
-				for node in nodes {{
-					let end_pos = node.get_end_pos();
-					if end_pos > *start_pos {{
-						return end_pos;
-					}}
-				}}
-				*start_pos
-			}},
-			Node::String(string, start_pos) => *start_pos + string.len(),
-		}}
-	}}
-}}
-
-#[derive(Clone)]
-#[allow(dead_code)]
-pub enum Expression {{
-	Rule(&'static str),
-	RegexLiteral(&'static str),
-	StringLiteral(&'static str),
-	Keyword(&'static str),
-	Or(Box<Expression>, Box<Expression>),
-	And(Box<Expression>, Box<Expression>),
-	DelimitRepeatOne(Box<Expression>, Box<Expression>),
-	DelimitRepeatZero(Box<Expression>, Box<Expression>),
-	Optional(Box<Expression>),
-	RepeatOne(Box<Expression>),
-	RepeatZero(Box<Expression>),
-}}
-
-impl fmt::Debug for Expression {{
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{
-		match self {{
-			Expression::Rule(rule) => write!(f, \"{{}}\", rule),
-			Expression::RegexLiteral(regex) => write!(f, \"{{}}\", regex),
-			Expression::StringLiteral(string) => write!(f, \"{{}}\", string),
-			Expression::Keyword(keyword) => write!(f, \"{{}}\", keyword),
-			Expression::Or(left, right) => write!(f, \"{{:?}} | {{:?}}\", left, right),
-			Expression::And(left, right) => write!(f, \"{{:?}} & {{:?}}\", left, right),
-			Expression::DelimitRepeatOne(left, right) => write!(f, \"({{:?}}),({{:?}})+\", left, right),
-			Expression::DelimitRepeatZero(left, right) => write!(f, \"({{:?}}),({{:?}})*\", left, right),
-			Expression::Optional(expr) => write!(f, \"({{:?}})?\", expr),
-			Expression::RepeatOne(expr) => write!(f, \"({{:?}})+\", expr),
-			Expression::RepeatZero(expr) => write!(f, \"({{:?}})*\", expr),
-		}}
-	}}
-}}
-
-#[allow(dead_code)]
-impl Expression {{
-    pub fn or(left: Expression, right: Expression) -> Self {{
-        Expression::Or(Box::new(left), Box::new(right))
-	}}
-    pub fn and(left: Expression, right: Expression) -> Self {{
-        Expression::And(Box::new(left), Box::new(right))
-	}}
-    pub fn delimit_repeat_one(left: Expression, right: Expression) -> Self {{
-        Expression::DelimitRepeatOne(Box::new(left), Box::new(right))
-	}}
-    pub fn delimit_repeat_zero(left: Expression, right: Expression) -> Self {{
-        Expression::DelimitRepeatZero(Box::new(left), Box::new(right))
-	}}
-    pub fn optional(expr: Expression) -> Self {{
-        Expression::Optional(Box::new(expr))
-	}}
-    pub fn repeat_one(expr: Expression) -> Self {{
-        Expression::RepeatOne(Box::new(expr))
-	}}
-    pub fn repeat_zero(expr: Expression) -> Self {{
-        Expression::RepeatZero(Box::new(expr))
-	}}
-}}
 
 #[allow(dead_code)]
 /// Generated Grammar Specification

@@ -7,7 +7,7 @@ use generator::Generator;
 use std::fs;
 
 fn main() {
-	let generate = false;
+	let generate = true;
 
 	if generate {
 		// Read the grammar specification and code files
