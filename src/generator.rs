@@ -206,21 +206,25 @@ impl Parser {{
 	}}
 
 	fn expect_string(&mut self, string: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
-
 		let start_pos = self.position;
 		if self.content[self.position..].starts_with(string) {{
 			self.position += string.len();
+			if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+				self.position += whitespace.end();
+			}}
 			return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
 		}}
 		self.position = start_pos;
 		Ok(None)
-
 	}}
 
 	fn expect_regex(&mut self, regex: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
 		if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {{
 			self.position += captures.get(0).unwrap().end();
+			if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+				self.position += whitespace.end();
+			}}
 			return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
 		}}
 		self.position = start_pos;
@@ -397,9 +401,9 @@ impl Parser {{
 
 		for expr in expressions.iter() {{
 			if let Some(nodes) = self.eval(&expr)? {{
+				let new_end_pos = self.position;
 				self.position = start_pos; // Reset position to start for each expression evaluation
-				let new_end_pos = nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(start_pos);
-				if new_end_pos > longest_end {{
+				if new_end_pos > longest_end || longest_nodes.len() == 0 {{
 					longest_end = new_end_pos;
 					longest_nodes = nodes;
 				}}
