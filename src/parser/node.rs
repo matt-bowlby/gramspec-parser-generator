@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Node {
@@ -46,5 +48,22 @@ impl Node {
 			},
 			Node::String(string, start_pos) => *start_pos + string.len(),
 		}
+	}
+
+	pub fn pretty_print(&self, indent: usize) -> String {
+		let mut result = String::new();
+		let indent_str = "    ".repeat(indent);
+		match self {
+			Node::Rule(name, children, _) => {
+				result.push_str(&format!("{}{}:", indent_str, name));
+				for child in children {
+					result.push_str(&format!("\n{}", child.pretty_print(indent + 1)));
+				}
+			},
+			Node::String(string, _) => {
+				result.push_str(&format!("{}\"{}\"", indent_str, string.escape_debug()));
+			},
+		}
+		result
 	}
 }
