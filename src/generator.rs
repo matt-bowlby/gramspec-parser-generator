@@ -100,12 +100,20 @@ impl Parser {{
 
 	fn expect_string(&mut self, string: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
-		if self.content[self.position..].starts_with(string) {{
-			self.position += string.len();
-			if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
-				self.position += whitespace.end();
+		loop {{
+			if self.content[self.position..].starts_with(string) {{
+				self.position += string.len();
+				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+					self.position += whitespace.end();
+				}}
+				return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
+			}} else {{
+				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+					self.position += whitespace.end();
+				}} else {{
+					break;
+				}}
 			}}
-			return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
 		}}
 		self.position = start_pos;
 		Ok(None)
@@ -113,12 +121,17 @@ impl Parser {{
 
 	fn expect_regex(&mut self, regex: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {{
 		let start_pos = self.position;
-		if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {{
-			self.position += captures.get(0).unwrap().end();
-			if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
-				self.position += whitespace.end();
+		loop {{
+			if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {{
+				self.position += captures.get(0).unwrap().end();
+				return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
+			}} else {{
+				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+					self.position += whitespace.end();
+				}} else {{
+					break;
+				}}
 			}}
-			return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
 		}}
 		self.position = start_pos;
 		Ok(None)
