@@ -103,12 +103,9 @@ impl Parser {{
 		loop {{
 			if self.content[self.position..].starts_with(string) {{
 				self.position += string.len();
-				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
-					self.position += whitespace.end();
-				}}
 				return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
 			}} else {{
-				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+				if let Some(whitespace) = Regex::new(r\"^\\s+\").unwrap().find(&self.content[self.position..]) {{
 					self.position += whitespace.end();
 				}} else {{
 					break;
@@ -126,7 +123,7 @@ impl Parser {{
 				self.position += captures.get(0).unwrap().end();
 				return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
 			}} else {{
-				if let Some(whitespace) = Regex::new(r\"^[ \\t]+\").unwrap().find(&self.content[self.position..]) {{
+				if let Some(whitespace) = Regex::new(r\"^\\s+\").unwrap().find(&self.content[self.position..]) {{
 					self.position += whitespace.end();
 				}} else {{
 					break;
@@ -505,8 +502,20 @@ impl Parser {{
 		match expression {
 			Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
 			Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
-			Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r#\"{}\"#)", regex.value)),
-			Expression::StringLiteral(string) => Ok(format!("StringLiteral(r#\"{}\"#)", string.value)),
+			Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r#\"^{}\"#)", regex.value)),
+			Expression::StringLiteral(string) => {
+				if string.value == "\"" {
+					Ok("StringLiteral(\"\\\"\")".to_string())
+				} else if string.value == "\\" {
+					Ok("StringLiteral(\"\\\\\")".to_string())
+				} else if string.value == "\n" {
+					Ok("StringLiteral(\"\\n\")".to_string())
+				} else if string.value == "\t" {
+					Ok("StringLiteral(\"\\t\")".to_string())
+				} else {
+					Ok(format!("StringLiteral(\"{}\")", string.value))
+				}
+			},
 			Expression::Or(left, right) => Ok(format!("Expression::or({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
 			Expression::And(left, right) => Ok(format!("Expression::and({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),
 			Expression::DelimitRepeatOne(left, right) => Ok(format!("Expression::delimit_repeat_one({}, {})", self.to_conditional(left)?, self.to_conditional(right)?)),

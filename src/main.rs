@@ -7,7 +7,7 @@ use generator::Generator;
 use std::fs;
 
 fn main() {
-	let generate = true;
+	let generate = false;
 
 	if generate {
 		// Read the grammar specification and code files
@@ -26,7 +26,10 @@ fn main() {
 		// Write the generated code to a file
 		fs::write("./src/parser.rs", output).unwrap();
 	} else {
-		print!("{:?}", parser::Parser::new()
-			.parse_file("test_files/test.txt"));
+		print!("{}", parser::Parser::new()
+			.parse_file("test_files/test.txt")
+			.unwrap() // Super unsafe, but for testing purposes
+			.unwrap() // Same as above
+			.pretty_print(0));
 	}
 }

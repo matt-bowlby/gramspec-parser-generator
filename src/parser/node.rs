@@ -1,5 +1,3 @@
-use std::fmt;
-
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Node {

@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use unescape::unescape;
 
 lazy_static! {
     static ref RULE_NAME_REGEX: Regex = Regex::new(r"^[a-z_][a-z0-9_]*").unwrap();
@@ -120,7 +121,7 @@ impl TokenType {
 				value.strip_prefix('r').unwrap().trim_matches('\'').to_string()
 			}
 			TokenType::StringLiteral => {
-				value.trim_matches('\'').to_string()
+				unescape(value.trim_matches('\'')).unwrap()
 			}
 			// No transformation needed for other token types
 			_ => value.clone(),
