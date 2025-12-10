@@ -36,13 +36,7 @@ impl Node {
 	pub fn get_end_pos(&self) -> usize {
 		match self {
 			Node::Rule(_, nodes, start_pos) => {
-				for node in nodes {
-					let end_pos = node.get_end_pos();
-					if end_pos > *start_pos {
-						return end_pos;
-					}
-				}
-				*start_pos
+				nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(*start_pos)
 			},
 			Node::String(string, start_pos) => *start_pos + string.len(),
 		}

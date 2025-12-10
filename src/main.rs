@@ -22,9 +22,7 @@ fn main() {
 		});
 		// Generate the parser code from the grammar specification
 		let generator = Generator::new(gramspec);
-		let output = generator.generate().unwrap();
-		// Write the generated code to a file
-		fs::write("./src/parser.rs", output).unwrap();
+		generator.generate("./src/parser.rs").unwrap();
 	} else {
 		print!("{}", parser::Parser::new()
 			.parse_file("test_files/test.txt")

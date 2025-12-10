@@ -4,6 +4,7 @@ pub struct GramSpecConfig {
 	pub entry_rule: String,
 	pub ignore_spaces: bool,
 	pub ignore_newlines: bool,
+	pub ignore_between_tokens: Vec<String>,
 }
 
 impl GramSpecConfig {
@@ -12,6 +13,7 @@ impl GramSpecConfig {
 			entry_rule: String::from("file"),
 			ignore_spaces: false,
 			ignore_newlines: false,
+			ignore_between_tokens: Vec::new(),
 		}
 	}
 
@@ -22,6 +24,12 @@ impl GramSpecConfig {
 				self.ignore_spaces = value.parse::<bool>()?;
 			},
 			"ignore_newlines" => self.ignore_newlines = value.parse::<bool>()?,
+			"ignore_between_tokens" => {
+				self.ignore_between_tokens = value
+					.split(',')
+					.map(|s| s.trim().to_string())
+					.collect();
+			},
 			_ => return Err(format!("Unknown configuration option: {}", config).into()),
 		}
 		Ok(())
