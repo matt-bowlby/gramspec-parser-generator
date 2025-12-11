@@ -1,0 +1,7 @@
+_TS_fn __RULENAME_(&mut self) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let expressions: [Expression; _EXPRESSIONSLENGTH_] = [
+_EXPRESSIONS_
+_TS__TS_];
+
+_TS__TS_self.get_longest_expression_match(&expressions)
+_TS_}

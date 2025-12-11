@@ -1,13 +1,13 @@
 mod gramspec_parser;
 mod generator;
-mod parser;
+// mod parser;
 
 use gramspec_parser::parser::Parser;
 use generator::Generator;
 use std::fs;
 
 fn main() {
-	let generate = false;
+	let generate = true;
 
 	if generate {
 		// Read the grammar specification and code files
@@ -22,12 +22,12 @@ fn main() {
 		});
 		// Generate the parser code from the grammar specification
 		let generator = Generator::new(gramspec);
-		generator.generate("./src/parser.rs").unwrap();
+		generator.generate("./src/parser.rs", "PlainTalkParser", "    ").unwrap();
 	} else {
-		print!("{}", parser::Parser::new()
-			.parse_file("test_files/test.txt")
-			.unwrap() // Super unsafe, but for testing purposes
-			.unwrap() // Same as above
-			.pretty_print(0));
+		// print!("{}", parser::Parser::new()
+		// 	.parse_file("test_files/test.txt")
+		// 	.unwrap() // Super unsafe, but for testing purposes
+		// 	.unwrap() // Same as above
+		// 	.pretty_print(0));
 	}
 }

@@ -1,0 +1,339 @@
+mod expression;
+mod node;
+
+use std::error::Error;
+use std::collections::HashMap;
+use regex::Regex;
+
+use expression::Expression::{self, *};
+use node::Node;
+
+const KEYWORDS: &[(&str, &str)] = &[
+_TS_("ENDMARKER", "0"),
+];
+
+#[allow(dead_code)]
+pub struct _PARSERNAME_ {
+_TS_pub position: usize,
+
+_TS_content: String,
+_TS_memos: HashMap<usize, HashMap<String, Box<Option<Vec<Node>>>>>,
+}
+
+#[allow(dead_code)]
+impl _PARSERNAME_ {
+_TS_pub fn new() -> Self {
+_TS__TS__PARSERNAME_ { content: String::new(), position: 0, memos: HashMap::new() }
+_TS_}
+
+_TS_pub fn parse(&mut self, input: String) -> Result<Option<Node>, Box<dyn Error>> {
+_TS__TS_self.position = 0;
+_TS__TS_self.content = input;
+_TS__TS_if let Some(nodes) = self.__ENTRYRULE_()? {
+_TS__TS__TS_return Ok(Some(nodes[0].clone()));
+_TS__TS_}
+_TS__TS_Ok(None)
+_TS_}
+
+_TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {
+_TS__TS_let content = std::fs::read_to_string(file_path)?;
+_TS__TS_self.parse(content)
+_TS_}
+
+_TS_fn circular_wrapper(&mut self, rule_name: String) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let pos = self.position;
+
+_TS__TS_if let Some(cached_result_box) = self.memos.get(&pos).and_then(|memo| memo.get(&rule_name)) {
+_TS__TS__TS_let cached_result = *cached_result_box.clone();
+
+_TS__TS__TS_let end_pos = cached_result.as_ref()
+_TS__TS__TS__TS_.and_then(|nodes| nodes.iter().map(|n| n.get_end_pos()).max())
+_TS__TS__TS__TS_.unwrap_or(pos);
+_TS__TS__TS_self.position = end_pos;
+
+_TS__TS__TS_return Ok(cached_result);
+_TS__TS_}
+
+_TS__TS_self.memos.entry(pos).or_insert_with(HashMap::new).insert(rule_name.clone(), Box::new(None));
+
+_TS__TS_let mut last_result = None;
+_TS__TS_let mut last_pos = pos;
+
+_TS__TS_loop {
+_TS__TS__TS_self.position = pos;
+
+_TS__TS__TS_let result = self.call_rule(&rule_name, false)?;
+_TS__TS__TS_let end_pos = self.position;
+
+_TS__TS__TS_if end_pos <= last_pos {
+_TS__TS__TS__TS_break;
+_TS__TS__TS_}
+
+_TS__TS__TS_last_result = result;
+_TS__TS__TS_last_pos = end_pos;
+
+_TS__TS__TS_if let Some(memo) = self.memos.get_mut(&pos) {
+_TS__TS__TS__TS_memo.insert(rule_name.clone(), Box::new(last_result.clone()));
+_TS__TS__TS_}
+_TS__TS_}
+
+_TS__TS_self.position = last_pos;
+_TS__TS_Ok(last_result)
+_TS_}
+
+_TS_fn expect_string(&mut self, string: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let mut start_pos = self.position;
+_TS__TS_loop {
+_TS__TS__TS_if self.content[self.position..].starts_with(string) {
+_TS__TS__TS__TS_self.position += string.len();
+_TS__TS__TS__TS_return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^\s+").unwrap().find(&self.content[self.position..]) {
+_TS__TS__TS__TS__TS_start_pos += whitespace.end();
+_TS__TS__TS__TS__TS_self.position = start_pos;
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS_}
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_self.position = start_pos;
+_TS__TS_Ok(None)
+_TS_}
+
+_TS_fn expect_regex(&mut self, regex: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let mut start_pos = self.position;
+_TS__TS_loop {
+_TS__TS__TS_if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
+_TS__TS__TS__TS_self.position += captures.get(0).unwrap().end();
+_TS__TS__TS__TS_return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^\s+").unwrap().find(&self.content[self.position..]) {
+_TS__TS__TS__TS__TS_start_pos += whitespace.end();
+_TS__TS__TS__TS__TS_self.position = start_pos;
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS_}
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_self.position = start_pos;
+_TS__TS_Ok(None)
+_TS_}
+
+_TS_fn get_keywords_map(&self) -> HashMap<String, String> {
+_TS__TS_KEYWORDS.iter()
+_TS__TS__TS_.map(|(k, v)| (k.to_string(), v.to_string()))
+_TS__TS__TS_.collect()
+_TS_}
+
+_TS_fn expect_keyword(&mut self, keyword: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let start_pos = self.position;
+_TS__TS_let keyword_value = self.get_keywords_map().get(keyword)
+_TS__TS__TS_.ok_or_else(|| format!("Unknown keyword: {}", keyword))?
+_TS__TS__TS_.to_owned();
+_TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
+_TS__TS__TS_self.position += keyword_value.len();
+_TS__TS__TS_return Ok(Some(vec![Node::String(keyword.to_string(), start_pos)]));
+_TS__TS_}
+_TS__TS_self.position = start_pos;
+_TS__TS_Ok(None)
+_TS_}
+
+_TS_fn eval(&mut self, expression: &Expression) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_match expression {
+_TS__TS__TS_Expression::Rule(rule) => {
+_TS__TS__TS__TS_if let Some(nodes) = self.call_rule(rule, true)? {
+_TS__TS__TS__TS__TS_Ok(Some(nodes))
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_Ok(None)
+_TS__TS__TS__TS_}
+_TS__TS__TS_},
+_TS__TS__TS_Expression::RegexLiteral(regex) => self.expect_regex(regex),
+_TS__TS__TS_Expression::StringLiteral(string) => self.expect_string(string),
+_TS__TS__TS_Expression::Keyword(keyword) => self.expect_keyword(keyword),
+_TS__TS__TS_Expression::Or(left, right) => {
+_TS__TS__TS__TS_let start_pos = self.position;
+_TS__TS__TS__TS_let left_nodes = self.eval(&*left)?;
+_TS__TS__TS__TS_let left_end = self.position;
+_TS__TS__TS__TS_self.position = start_pos;
+_TS__TS__TS__TS_let right_nodes = self.eval(&*right)?;
+_TS__TS__TS__TS_let right_end = self.position;
+
+_TS__TS__TS__TS_if left_end > right_end {
+_TS__TS__TS__TS__TS_self.position = left_end;
+_TS__TS__TS__TS__TS_return Ok(left_nodes);
+_TS__TS__TS__TS_} else if right_end > left_end {
+_TS__TS__TS__TS__TS_self.position = right_end;
+_TS__TS__TS__TS__TS_return Ok(right_nodes);
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_self.position = start_pos;
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+_TS__TS__TS_},
+_TS__TS__TS_Expression::And(left, right) => {
+_TS__TS__TS__TS_let left_nodes = self.eval(&*left)?;
+_TS__TS__TS__TS_if left_nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_let right_nodes = self.eval(&*right)?;
+_TS__TS__TS__TS_if right_nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_let mut final_nodes = left_nodes.unwrap();
+_TS__TS__TS__TS_final_nodes.extend(right_nodes.unwrap());
+_TS__TS__TS__TS_Ok(Some(final_nodes))
+_TS__TS__TS_},
+_TS__TS__TS_Expression::DelimitRepeatOne(expression, delimiter) => {
+_TS__TS__TS__TS_// Attempt to parse the first expression
+_TS__TS__TS__TS_let nodes = self.eval(&*expression)?;
+_TS__TS__TS__TS_// If the first expression fails, return an empty vector
+_TS__TS__TS__TS_if nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_let mut nodes = nodes.unwrap();
+
+_TS__TS__TS__TS_// Attempt to parse subsequent expressions with delimiters
+_TS__TS__TS__TS_loop {
+_TS__TS__TS__TS__TS_let start = self.position;
+_TS__TS__TS__TS__TS_// Attempt to parse the delimiter
+_TS__TS__TS__TS__TS_let delimiter_nodes = self.eval(&*delimiter)?;
+_TS__TS__TS__TS__TS_// If it fails, break the loop
+_TS__TS__TS__TS__TS_if delimiter_nodes.is_none() {
+_TS__TS__TS__TS__TS__TS_self.position = start; // Technically unnecessary as a failure would leave position unchanged, but just to be consistent
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// Attempt to parse the next expression
+_TS__TS__TS__TS__TS_let expression_nodes = self.eval(&*expression)?;
+_TS__TS__TS__TS__TS_// If the next expression fails, break the loop
+_TS__TS__TS__TS__TS_if expression_nodes.is_none() {
+_TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
+_TS__TS__TS__TS__TS_if self.position <= start {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+
+_TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
+_TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
+_TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_// Return the nodes collected so far
+_TS__TS__TS__TS_Ok(Some(nodes))
+_TS__TS__TS_},
+_TS__TS__TS_Expression::DelimitRepeatZero(left, right) => {
+_TS__TS__TS__TS_// Attempt to parse the first expression
+_TS__TS__TS__TS_let nodes = self.eval(&*left)?;
+_TS__TS__TS__TS_// If the first expression fails, return an empty vector
+_TS__TS__TS__TS_if nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(Some(vec![]));
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_let mut nodes = nodes.unwrap();
+
+_TS__TS__TS__TS_// Attempt to parse subsequent expressions with delimiters
+_TS__TS__TS__TS_loop {
+_TS__TS__TS__TS__TS_let start = self.position;
+_TS__TS__TS__TS__TS_// Attempt to parse the delimiter
+_TS__TS__TS__TS__TS_let delimiter_nodes = self.eval(&*right)?;
+_TS__TS__TS__TS__TS_// If it fails, break the loop
+_TS__TS__TS__TS__TS_if delimiter_nodes.is_none() {
+_TS__TS__TS__TS__TS__TS_self.position = start; // Technically unnecessary as a failure would leave position unchanged, but just to be consistent
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// Attempt to parse the next expression
+_TS__TS__TS__TS__TS_let expression_nodes = self.eval(&*left)?;
+_TS__TS__TS__TS__TS_// If the next expression fails, break the loop
+_TS__TS__TS__TS__TS_if expression_nodes.is_none() {
+_TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
+_TS__TS__TS__TS__TS_if self.position <= start {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+
+_TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
+_TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
+_TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_// Return the nodes collected so far
+_TS__TS__TS__TS_Ok(Some(nodes))
+_TS__TS__TS_},
+_TS__TS__TS_Expression::RepeatOne(expr) => {
+_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
+_TS__TS__TS__TS_if nodes.is_none() { return Ok(None); }
+
+_TS__TS__TS__TS_let mut last_pos = self.position;
+_TS__TS__TS__TS_while let Some(new_nodes) = self.eval(&*expr)? {
+_TS__TS__TS__TS__TS_nodes.as_mut().unwrap().extend(new_nodes);
+_TS__TS__TS__TS__TS_if self.position == last_pos {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_last_pos = self.position;
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_Ok(nodes)
+_TS__TS__TS_},
+_TS__TS__TS_Expression::RepeatZero(expr) => {
+_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
+_TS__TS__TS__TS_if nodes.is_none() { return Ok(Some(vec![])); }
+
+_TS__TS__TS__TS_let mut last_pos = self.position;
+_TS__TS__TS__TS_while let Some(new_nodes) = self.eval(&*expr)? {
+_TS__TS__TS__TS__TS_nodes.as_mut().unwrap().extend(new_nodes);
+_TS__TS__TS__TS__TS_if self.position == last_pos {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_last_pos = self.position;
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_Ok(nodes)
+_TS__TS__TS_},
+_TS__TS__TS_Expression::Optional(expr) => {
+_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
+
+_TS__TS__TS__TS_if nodes.is_none() {
+_TS__TS__TS__TS__TS_nodes = Some(vec![]);
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_Ok(nodes)
+_TS__TS__TS_},
+_TS__TS_}
+_TS_}
+
+_TS_fn get_longest_expression_match(&mut self, expressions: &[Expression]) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_let start_pos = self.position;
+_TS__TS_let mut longest_end = start_pos;
+_TS__TS_let mut longest_nodes = None;
+
+_TS__TS_for expr in expressions.iter() {
+_TS__TS__TS_let result = self.eval(&expr)?;
+_TS__TS__TS_let new_end_pos = self.position;
+_TS__TS__TS_self.position = start_pos; // Reset position to start for each expression evaluation
+_TS__TS__TS_if new_end_pos > longest_end || longest_nodes.is_none() {
+_TS__TS__TS__TS_longest_end = new_end_pos;
+_TS__TS__TS__TS_longest_nodes = result;
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_if longest_nodes.is_none() {
+_TS__TS__TS_self.position = start_pos; // Reset position if no matches found
+_TS__TS_} else {
+_TS__TS__TS_self.position = longest_end; // Update position to the end of the longest match
+_TS__TS_}
+_TS__TS_Ok(longest_nodes)
+_TS_}
+
+_TS_fn call_rule(&mut self, rule_name: &str, protected: bool) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS__TS_match rule_name {
+_RULECASES_
+_TS__TS__TS__ => Err(format!("Unknown rule: {}", rule_name).into()),
+_TS__TS_}
+_TS_}
+
+_RULEFUNCTIONS_
+
+_METARULEFUNCTIONS_
+}
