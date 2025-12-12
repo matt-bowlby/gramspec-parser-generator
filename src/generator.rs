@@ -64,6 +64,20 @@ impl Generator {
                 }
             }
         }
+        for i in 0..self.gramspec.meta_rules.keys().len() {
+            let rule = self.gramspec.meta_rules.keys().nth(i).unwrap();
+            if self.gramspec.is_left_circular(rule) {
+                rule_cases.push_str(&rule_case_circular_template.replace("_RULENAME_", rule));
+                if i < self.gramspec.meta_rules.keys().len() - 1 {
+                    rule_cases.push('\n');
+                }
+            } else {
+                rule_cases.push_str(&rule_case_regular_template.replace("_RULENAME_", rule));
+                if i < self.gramspec.meta_rules.keys().len() - 1 {
+                    rule_cases.push('\n');
+                }
+            }
+        }
         Ok(rule_cases)
     }
 
@@ -109,8 +123,8 @@ impl Generator {
 
         // Generate rule functions
         let mut rule_functions = String::new();
-        for i in 0..self.gramspec.rules.keys().len() {
-            let rule = self.gramspec.rules.keys().nth(i).unwrap();
+        for i in 0..self.gramspec.meta_rules.keys().len() {
+            let rule = self.gramspec.meta_rules.keys().nth(i).unwrap();
             let token_expression = self
                 .gramspec
                 .rules
@@ -133,7 +147,7 @@ impl Generator {
                     .replace("_EXPRESSIONS_", &expressions)
                     .replace("_EXPRESSIONSLENGTH_", &token_expression.len().to_string()),
             );
-            if i < self.gramspec.rules.keys().len() - 1 {
+            if i < self.gramspec.meta_rules.keys().len() - 1 {
                 rule_functions.push_str("\n\n");
             }
         }
