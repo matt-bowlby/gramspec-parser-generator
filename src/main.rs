@@ -1,8 +1,10 @@
 mod gramspec_parser;
 mod generator;
-// mod parser;
+mod parser;
 
 use gramspec_parser::parser::Parser;
+use parser::PlainTalkParser;
+
 use generator::Generator;
 use std::fs;
 
@@ -24,10 +26,10 @@ fn main() {
 		let generator = Generator::new(gramspec);
 		generator.generate("./src/parser.rs", "PlainTalkParser", "    ").unwrap();
 	} else {
-		// print!("{}", parser::Parser::new()
-		// 	.parse_file("test_files/test.txt")
-		// 	.unwrap() // Super unsafe, but for testing purposes
-		// 	.unwrap() // Same as above
-		// 	.pretty_print(0));
+		print!("{}", PlainTalkParser::new()
+			.parse_file("test_files/test.txt")
+			.unwrap() // Super unsafe, but for testing purposes
+			.unwrap() // Same as above
+			.pretty_print(0));
 	}
 }
