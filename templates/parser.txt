@@ -1,12 +1,8 @@
-mod expression;
-mod node;
-
 use std::error::Error;
 use std::collections::HashMap;
 use regex::Regex;
 
 use expression::Expression::{self, *};
-use node::Node;
 
 const KEYWORDS: &[(&str, &str)] = &[
 _TS_("ENDMARKER", "0"),
@@ -209,14 +205,15 @@ _TS__TS__TS__TS__TS_if expression_nodes.is_none() {
 _TS__TS__TS__TS__TS__TS_self.position = start;
 _TS__TS__TS__TS__TS__TS_break;
 _TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
-_TS__TS__TS__TS__TS_if self.position <= start {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
 
 _TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
 _TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
 _TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
+
+_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
+_TS__TS__TS__TS__TS_if self.position <= start {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
 _TS__TS__TS__TS_}
 
 _TS__TS__TS__TS_// Return the nodes collected so far
@@ -249,14 +246,15 @@ _TS__TS__TS__TS__TS_if expression_nodes.is_none() {
 _TS__TS__TS__TS__TS__TS_self.position = start;
 _TS__TS__TS__TS__TS__TS_break;
 _TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
-_TS__TS__TS__TS__TS_if self.position <= start {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
 
 _TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
 _TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
 _TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
+
+_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
+_TS__TS__TS__TS__TS_if self.position <= start {
+_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS_}
 _TS__TS__TS__TS_}
 
 _TS__TS__TS__TS_// Return the nodes collected so far
@@ -336,4 +334,128 @@ _TS_}
 _RULEFUNCTIONS_
 
 _METARULEFUNCTIONS_
+}
+
+mod expression {
+_TS_use std::fmt;
+
+_TS_#[derive(Clone)]
+_TS_#[allow(dead_code)]
+_TS_pub enum Expression {
+_TS__TS_Rule(&'static str),
+_TS__TS_RegexLiteral(&'static str),
+_TS__TS_StringLiteral(&'static str),
+_TS__TS_Keyword(&'static str),
+_TS__TS_Or(Box<Expression>, Box<Expression>),
+_TS__TS_And(Box<Expression>, Box<Expression>),
+_TS__TS_DelimitRepeatOne(Box<Expression>, Box<Expression>),
+_TS__TS_DelimitRepeatZero(Box<Expression>, Box<Expression>),
+_TS__TS_Optional(Box<Expression>),
+_TS__TS_RepeatOne(Box<Expression>),
+_TS__TS_RepeatZero(Box<Expression>),
+_TS_}
+
+_TS_impl fmt::Debug for Expression {
+_TS__TS_fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+_TS__TS__TS_match self {
+_TS__TS__TS__TS_Expression::Rule(rule) => write!(f, "{}", rule),
+_TS__TS__TS__TS_Expression::RegexLiteral(regex) => write!(f, "{}", regex),
+_TS__TS__TS__TS_Expression::StringLiteral(string) => write!(f, "{}", string),
+_TS__TS__TS__TS_Expression::Keyword(keyword) => write!(f, "{}", keyword),
+_TS__TS__TS__TS_Expression::Or(left, right) => write!(f, "{:?} | {:?}", left, right),
+_TS__TS__TS__TS_Expression::And(left, right) => write!(f, "{:?} & {:?}", left, right),
+_TS__TS__TS__TS_Expression::DelimitRepeatOne(left, right) => write!(f, "({:?}),({:?})+", left, right),
+_TS__TS__TS__TS_Expression::DelimitRepeatZero(left, right) => write!(f, "({:?}),({:?})*", left, right),
+_TS__TS__TS__TS_Expression::Optional(expr) => write!(f, "({:?})?", expr),
+_TS__TS__TS__TS_Expression::RepeatOne(expr) => write!(f, "({:?})+", expr),
+_TS__TS__TS__TS_Expression::RepeatZero(expr) => write!(f, "({:?})*", expr),
+_TS__TS__TS_}
+_TS__TS_}
+_TS_}
+
+_TS_#[allow(dead_code)]
+_TS_impl Expression {
+_TS__TS_pub fn or(left: Expression, right: Expression) -> Self {
+_TS__TS__TS_Expression::Or(Box::new(left), Box::new(right))
+_TS__TS_}
+_TS__TS_pub fn and(left: Expression, right: Expression) -> Self {
+_TS__TS__TS_Expression::And(Box::new(left), Box::new(right))
+_TS__TS_}
+_TS__TS_pub fn delimit_repeat_one(left: Expression, right: Expression) -> Self {
+_TS__TS__TS_Expression::DelimitRepeatOne(Box::new(left), Box::new(right))
+_TS__TS_}
+_TS__TS_pub fn delimit_repeat_zero(left: Expression, right: Expression) -> Self {
+_TS__TS__TS_Expression::DelimitRepeatZero(Box::new(left), Box::new(right))
+_TS__TS_}
+_TS__TS_pub fn optional(expr: Expression) -> Self {
+_TS__TS__TS_Expression::Optional(Box::new(expr))
+_TS__TS_}
+_TS__TS_pub fn repeat_one(expr: Expression) -> Self {
+_TS__TS__TS_Expression::RepeatOne(Box::new(expr))
+_TS__TS_}
+_TS__TS_pub fn repeat_zero(expr: Expression) -> Self {
+_TS__TS__TS_Expression::RepeatZero(Box::new(expr))
+_TS__TS_}
+_TS_}
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum Node {
+_TS_Rule(String, Vec<Box<Node>>, usize),
+_TS_String(String, usize),
+}
+
+#[allow(dead_code)]
+impl Node {
+_TS_pub fn append(&mut self, child: Node) {
+_TS__TS_match self {
+_TS__TS__TS_Node::Rule(_, children, _) => children.push(Box::new(child)),
+_TS__TS__TS__ => return,
+_TS__TS_}
+_TS_}
+
+_TS_pub fn extend(&mut self, children: Vec<Node>) {
+_TS__TS_// Only extend if the current node can be extended
+_TS__TS_if !matches!(self, Node::Rule(_, _, _)) { return; }
+_TS__TS_// Extend the current node with the provided children
+_TS__TS_for child in children {
+_TS__TS__TS_self.append(child);
+_TS__TS_}
+_TS_}
+
+_TS_pub fn set_children(&mut self, children: Vec<Node>) {
+_TS__TS_match self {
+_TS__TS__TS_Node::Rule(name, _, start_pos) => {
+_TS__TS__TS__TS_*self = Node::Rule(name.to_string(), children.into_iter().map(|n| Box::new(n)).collect(), *start_pos);
+_TS__TS__TS_},
+_TS__TS__TS__ => return,
+_TS__TS_}
+_TS_}
+
+_TS_pub fn get_end_pos(&self) -> usize {
+_TS__TS_match self {
+_TS__TS__TS_Node::Rule(_, nodes, start_pos) => {
+_TS__TS__TS__TS_nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(*start_pos)
+_TS__TS__TS_},
+_TS__TS__TS_Node::String(string, start_pos) => *start_pos + string.len(),
+_TS__TS_}
+_TS_}
+
+_TS_pub fn pretty_print(&self, indent: usize) -> String {
+_TS__TS_let mut result = String::new();
+_TS__TS_let indent_str = "_TS_".repeat(indent);
+_TS__TS_match self {
+_TS__TS__TS_Node::Rule(name, children, _) => {
+_TS__TS__TS__TS_result.push_str(&format!("{}{}:", indent_str, name));
+_TS__TS__TS__TS_for child in children {
+_TS__TS__TS__TS__TS_result.push_str(&format!("\n{}", child.pretty_print(indent + 1)));
+_TS__TS__TS__TS_}
+_TS__TS__TS_},
+_TS__TS__TS_Node::String(string, _) => {
+_TS__TS__TS__TS_result.push_str(&format!("{}\"{}\"", indent_str, string.escape_debug()));
+_TS__TS__TS_},
+_TS__TS_}
+_TS__TS_result
+_TS_}
 }
