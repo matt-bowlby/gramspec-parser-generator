@@ -26,10 +26,10 @@ fn main() {
 		let generator = Generator::new(gramspec);
 		generator.generate("./src/parser.rs", "PlainTalkParser", "    ").unwrap();
 	} else {
-		print!("{}", PlainTalkParser::new()
+		PlainTalkParser::new()
 			.parse_file("test_files/test.txt")
-			.unwrap() // Super unsafe, but for testing purposes
-			.unwrap() // Same as above
-			.pretty_print(0));
+			.unwrap()
+			.unwrap()
+			.pretty_print();
 	}
 }

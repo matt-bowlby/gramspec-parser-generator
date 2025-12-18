@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use regex::Regex;
 
 use expression::Expression::{self, *};
+use node::{Node, NodeType::*};
 
 const KEYWORDS: &[(&str, &str)] = &[
 _TS_("ENDMARKER", "0"),
@@ -82,7 +83,7 @@ _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if self.content[self.position..].starts_with(string) {
 _TS__TS__TS__TS_self.position += string.len();
-_TS__TS__TS__TS_return Ok(Some(vec![Node::String(string.to_string(), start_pos)]));
+_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(string.to_string()), start_pos)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^\s+").unwrap().find(&self.content[self.position..]) {
 _TS__TS__TS__TS__TS_start_pos += whitespace.end();
@@ -101,7 +102,12 @@ _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
 _TS__TS__TS__TS_self.position += captures.get(0).unwrap().end();
-_TS__TS__TS__TS_return Ok(Some(vec![Node::String(captures.get(0).unwrap().as_str().to_string(), start_pos)]));
+_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(
+_TS__TS__TS__TS__TS__String,
+_TS__TS__TS__TS__TS_vec![],
+_TS__TS__TS__TS__TS_Some(captures.get(0).unwrap().as_str().to_string()),
+_TS__TS__TS__TS__TS_start_pos,
+_TS__TS__TS__TS_)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^\s+").unwrap().find(&self.content[self.position..]) {
 _TS__TS__TS__TS__TS_start_pos += whitespace.end();
@@ -128,7 +134,7 @@ _TS__TS__TS_.ok_or_else(|| format!("Unknown keyword: {}", keyword))?
 _TS__TS__TS_.to_owned();
 _TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
 _TS__TS__TS_self.position += keyword_value.len();
-_TS__TS__TS_return Ok(Some(vec![Node::String(keyword.to_string(), start_pos)]));
+_TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos)]));
 _TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_Ok(None)
@@ -400,62 +406,83 @@ _TS_}
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum Node {
-_TS_Rule(String, Vec<Box<Node>>, usize),
-_TS_String(String, usize),
-}
-
-#[allow(dead_code)]
-impl Node {
-_TS_pub fn append(&mut self, child: Node) {
-_TS__TS_match self {
-_TS__TS__TS_Node::Rule(_, children, _) => children.push(Box::new(child)),
-_TS__TS__TS__ => return,
-_TS__TS_}
+pub mod node {
+_TS_#[derive(Debug, Clone, PartialEq, Eq)]
+_TS_pub enum NodeType {
+_PASCALCASERULENAMES_
+_TS__TS__String,
 _TS_}
 
-_TS_pub fn extend(&mut self, children: Vec<Node>) {
-_TS__TS_// Only extend if the current node can be extended
-_TS__TS_if !matches!(self, Node::Rule(_, _, _)) { return; }
-_TS__TS_// Extend the current node with the provided children
-_TS__TS_for child in children {
-_TS__TS__TS_self.append(child);
-_TS__TS_}
+_TS_#[derive(Debug, Clone)]
+_TS_pub struct Node {
+_TS__TS_pub node_type: NodeType,
+_TS__TS_pub children: Vec<Node>,
+_TS__TS_pub value: Option<String>,
+_TS__TS_pub position: usize,
 _TS_}
 
-_TS_pub fn set_children(&mut self, children: Vec<Node>) {
-_TS__TS_match self {
-_TS__TS__TS_Node::Rule(name, _, start_pos) => {
-_TS__TS__TS__TS_*self = Node::Rule(name.to_string(), children.into_iter().map(|n| Box::new(n)).collect(), *start_pos);
-_TS__TS__TS_},
-_TS__TS__TS__ => return,
+_TS_impl Node {
+_TS__TS_pub fn new(node_type: NodeType, children: Vec<Node>, value: Option<String>) -> Self {
+_TS__TS__TS_Node {
+_TS__TS__TS__TS_node_type,
+_TS__TS__TS__TS_children,
+_TS__TS__TS__TS_value,
+_TS__TS__TS__TS_position: 0,
+_TS__TS__TS_}
 _TS__TS_}
-_TS_}
 
-_TS_pub fn get_end_pos(&self) -> usize {
-_TS__TS_match self {
-_TS__TS__TS_Node::Rule(_, nodes, start_pos) => {
-_TS__TS__TS__TS_nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(*start_pos)
-_TS__TS__TS_},
-_TS__TS__TS_Node::String(string, start_pos) => *start_pos + string.len(),
+_TS__TS_pub fn formatted(&self, indent: usize, indent_string: &str) -> String {
+_TS__TS__TS_let mut result = String::new();
+_TS__TS__TS_let indent_str = indent_string.repeat(indent);
+_TS__TS__TS_result.push_str(&indent_str);
+_TS__TS__TS_if self.node_type != NodeType::_String {
+_TS__TS__TS__TS_result.push_str(&format!("{:?}: ", self.node_type));
+_TS__TS__TS_}
+_TS__TS__TS_if let Some(val) = &self.value {
+_TS__TS__TS__TS_result.push_str(&format!("\"{}\"", val.escape_debug()));
+_TS__TS__TS_}
+_TS__TS__TS_for child in &self.children {
+_TS__TS__TS__TS_result.push_str(&format!("\n{}", child.formatted(indent + 1, indent_string)));
+_TS__TS__TS_}
+_TS__TS__TS_result
 _TS__TS_}
-_TS_}
 
-_TS_pub fn pretty_print(&self, indent: usize) -> String {
-_TS__TS_let mut result = String::new();
-_TS__TS_let indent_str = "_TS_".repeat(indent);
-_TS__TS_match self {
-_TS__TS__TS_Node::Rule(name, children, _) => {
-_TS__TS__TS__TS_result.push_str(&format!("{}{}:", indent_str, name));
-_TS__TS__TS__TS_for child in children {
-_TS__TS__TS__TS__TS_result.push_str(&format!("\n{}", child.pretty_print(indent + 1)));
+_TS__TS_pub fn pretty_print(&self) {
+_TS__TS__TS_println!("{}", self.formatted(0, "_TS_"));
+_TS__TS_}
+
+_TS__TS_pub(super) fn extend(&mut self, children: &Vec<Node>) {
+_TS__TS__TS_self.children.extend(children.iter().cloned());
+_TS__TS_}
+
+_TS__TS_pub(super) fn new_with_position(
+_TS__TS__TS_node_type: NodeType,
+_TS__TS__TS_children: Vec<Node>,
+_TS__TS__TS_value: Option<String>,
+_TS__TS__TS_position: usize,
+_TS__TS_) -> Self {
+_TS__TS__TS_Node {
+_TS__TS__TS__TS_node_type,
+_TS__TS__TS__TS_children,
+_TS__TS__TS__TS_value,
+_TS__TS__TS__TS_position,
+_TS__TS__TS_}
+_TS__TS_}
+
+_TS__TS_pub(super) fn get_end_pos(&self) -> usize {
+_TS__TS__TS_if let Some(last_child) = self.children.last() {
+_TS__TS__TS__TS_last_child.get_end_pos()
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_if let Some(val) = &self.value {
+_TS__TS__TS__TS__TS_self.position + val.len()
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_self.position
 _TS__TS__TS__TS_}
-_TS__TS__TS_},
-_TS__TS__TS_Node::String(string, _) => {
-_TS__TS__TS__TS_result.push_str(&format!("{}\"{}\"", indent_str, string.escape_debug()));
-_TS__TS__TS_},
+_TS__TS__TS_}
 _TS__TS_}
-_TS__TS_result
+
+_TS__TS_pub(super) fn append(&mut self, child: Node) {
+_TS__TS__TS_self.children.push(child);
+_TS__TS_}
 _TS_}
 }

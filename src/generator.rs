@@ -19,6 +19,7 @@ impl Generator {
         let rule_cases = self.generate_rule_cases()?;
         let rule_functions = self.generate_rule_functions()?;
         let meta_rule_functions = self.generate_meta_rule_functions()?;
+        let node_types = self.node_types();
 
         // Initialize contents
         let mut contents = String::new();
@@ -32,6 +33,7 @@ impl Generator {
         contents = contents.replace("_RULECASES_", &rule_cases);
         contents = contents.replace("_RULEFUNCTIONS_", &rule_functions);
         contents = contents.replace("_METARULEFUNCTIONS_", &meta_rule_functions);
+        contents = contents.replace("_PASCALCASERULENAMES_", &node_types);
         contents = contents.replace("_TS_", tab_string); // Replace tab spaces
 
         // Write to output file
@@ -108,7 +110,8 @@ impl Generator {
                 &rule_function_template
                     .replace("_RULENAME_", &format!("{}", rule))
                     .replace("_EXPRESSIONS_", &expressions)
-                    .replace("_EXPRESSIONSLENGTH_", &token_expression.len().to_string()),
+                    .replace("_EXPRESSIONSLENGTH_", &token_expression.len().to_string())
+                    .replace("_PASCALCASERULENAME_", &Self::to_pascal_case(rule)),
             );
             if i < self.gramspec.rules.keys().len() - 1 {
                 rule_functions.push_str("\n\n");
@@ -207,4 +210,29 @@ impl Generator {
             )),
         }
     }
+
+    fn node_types(&self) -> String {
+        let mut result = String::new();
+        for i in 0..self.gramspec.rules.keys().len() {
+            let rule = self.gramspec.rules.keys().nth(i).unwrap();
+            if i < self.gramspec.rules.keys().len() - 1 {
+                result.push_str(&format!("{}{},\n", "_TS_".repeat(2), Self::to_pascal_case(rule)));
+            } else {
+                result.push_str(&format!("{}{},", "_TS_".repeat(2), Self::to_pascal_case(rule)));
+            }
+        }
+        result
+    }
+
+    fn to_pascal_case(s: &str) -> String {
+        s.split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+                }
+            })
+            .collect()
+}
 }
