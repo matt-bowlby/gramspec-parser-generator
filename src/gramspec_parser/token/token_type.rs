@@ -25,73 +25,73 @@ lazy_static! {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {
-	// Identifiers and Literals
-	RuleName,
-	Keyword,
-	RegexLiteral,
-	StringLiteral,
+    // Identifiers and Literals
+    RuleName,
+    Keyword,
+    RegexLiteral,
+    StringLiteral,
 
-	// Operators
-	Or,
-	And,
-	DelimitRepeat,
-	RepeatOne,
-	RepeatZero,
-	Optional,
-	OpenParen,
-	CloseParen,
+    // Operators
+    Or,
+    And,
+    DelimitRepeat,
+    RepeatOne,
+    RepeatZero,
+    Optional,
+    OpenParen,
+    CloseParen,
 
-	// Special Characters
-	RuleDefinition,
-	ConfigDirective,
-	MetaRule,
-	Comment,
+    // Special Characters
+    RuleDefinition,
+    ConfigDirective,
+    MetaRule,
+    Comment,
 
-	// Miscellaneous
-	Whitespace,
-	Newline,
+    // Miscellaneous
+    Whitespace,
+    Newline,
 }
 
 #[allow(dead_code)]
 impl TokenType {
-	/// Returns true if the token type is an operator.
-	pub fn is_operator(&self) -> bool {
-		matches!(
-			self,
-			TokenType::Or
-				| TokenType::And
-				| TokenType::DelimitRepeat
-				| TokenType::RepeatOne
-				| TokenType::RepeatZero
-				| TokenType::Optional
-		)
-	}
+    /// Returns true if the token type is an operator.
+    pub fn is_operator(&self) -> bool {
+        matches!(
+            self,
+            TokenType::Or
+                | TokenType::And
+                | TokenType::DelimitRepeat
+                | TokenType::RepeatOne
+                | TokenType::RepeatZero
+                | TokenType::Optional
+        )
+    }
 
-	/// Returns true if the token type is a unary operator.
-	pub fn is_unary_operator(&self) -> bool {
-		matches!(self, TokenType::Optional | TokenType::RepeatOne | TokenType::RepeatZero)
-	}
+    /// Returns true if the token type is a unary operator.
+    pub fn is_unary_operator(&self) -> bool {
+        matches!(self, TokenType::Optional | TokenType::RepeatOne | TokenType::RepeatZero)
+    }
 
-	/// Returns true if the token type is a binary operator.
-	pub fn is_binary_operator(&self) -> bool {
-		matches!(self, TokenType::Or | TokenType::And | TokenType::DelimitRepeat)
-	}
+    /// Returns true if the token type is a binary operator.
+    pub fn is_binary_operator(&self) -> bool {
+        matches!(self, TokenType::Or | TokenType::And | TokenType::DelimitRepeat)
+    }
 
-	/// Returns the precedence of the operator. Higher values indicate higher precedence.
-	pub fn get_precedence(&self) -> u8 {
-		match self {
-			TokenType::DelimitRepeat => 5,
-			TokenType::RepeatOne => 4,
-			TokenType::RepeatZero => 4,
-			TokenType::Optional => 3,
-			TokenType::And => 2,
-			TokenType::Or => 1,
-			_ => 0, // Non-operator tokens have no precedence
-		}
-	}
+    /// Returns the precedence of the operator. Higher values indicate higher precedence.
+    pub fn get_precedence(&self) -> u8 {
+        match self {
+            TokenType::DelimitRepeat => 5,
+            TokenType::RepeatOne => 4,
+            TokenType::RepeatZero => 4,
+            TokenType::Optional => 3,
+            TokenType::And => 2,
+            TokenType::Or => 1,
+            _ => 0, // Non-operator tokens have no precedence
+        }
+    }
 
-	/// Returns the compiled regex pattern for the token type.
-	pub fn get_regex(&self) -> &'static Regex {
+    /// Returns the compiled regex pattern for the token type.
+    pub fn get_regex(&self) -> &'static Regex {
         match self {
             TokenType::RuleName => &RULE_NAME_REGEX,
             TokenType::Keyword => &KEYWORD_REGEX,
@@ -116,44 +116,45 @@ impl TokenType {
 
     /// Transforms the value of the token based on its type. For example, it removes surrounding quotes from string literals.
     pub fn transform(&self, value: &String) -> String {
-		match self {
-			TokenType::RegexLiteral => {
-				value.strip_prefix('r').unwrap().trim_matches('\'').to_string()
-			}
-			TokenType::StringLiteral => {
-				unescape(value.trim_matches('\'')).unwrap()
-			}
-			// No transformation needed for other token types
-			_ => value.clone(),
-		}
-	}
+        match self {
+            TokenType::RegexLiteral => {
+                let string = value.strip_prefix('r').unwrap();
+                string[1..string.len()-1].to_string()
+            }
+            TokenType::StringLiteral => {
+                unescape(&value[1..value.len()-1]).unwrap()
+            }
+            // No transformation needed for other token types
+            _ => value.clone(),
+        }
+    }
 
-	pub fn all() -> Vec<TokenType> {
+    pub fn all() -> Vec<TokenType> {
         vec![
-			TokenType::RegexLiteral,
-			TokenType::StringLiteral,
+            TokenType::RegexLiteral,
+            TokenType::StringLiteral,
             TokenType::RuleName,
-			TokenType::Keyword,
+            TokenType::Keyword,
 
-			// Operators
-			TokenType::Or,
-			TokenType::And,
-			TokenType::DelimitRepeat,
-			TokenType::RepeatOne,
-			TokenType::RepeatZero,
-			TokenType::Optional,
-			TokenType::OpenParen,
-			TokenType::CloseParen,
+            // Operators
+            TokenType::Or,
+            TokenType::And,
+            TokenType::DelimitRepeat,
+            TokenType::RepeatOne,
+            TokenType::RepeatZero,
+            TokenType::Optional,
+            TokenType::OpenParen,
+            TokenType::CloseParen,
 
-			// Special Characters
-			TokenType::RuleDefinition,
-			TokenType::ConfigDirective,
-			TokenType::MetaRule,
-			TokenType::Comment,
+            // Special Characters
+            TokenType::RuleDefinition,
+            TokenType::ConfigDirective,
+            TokenType::MetaRule,
+            TokenType::Comment,
 
-			// Miscellaneous
-			TokenType::Whitespace,
-			TokenType::Newline,
+            // Miscellaneous
+            TokenType::Whitespace,
+            TokenType::Newline,
             // Add any other token types here
         ]
     }
