@@ -5,7 +5,7 @@ _EXPRESSIONS_
 _TS__TS_];
 
 _TS__TS_if let Some(matches) = self.get_longest_expression_match(&expressions)? {
-_TS__TS__TS_let node = Node::new_with_position(node::NodeType::_PASCALCASERULENAME_, matches, None, start_pos);
+_TS__TS__TS_let node = Node::new_with_position(node::NodeType::_PASCALCASERULENAME_, matches, None, start_pos, self.position);
 _TS__TS__TS_return Ok(Some(vec![node]));
 _TS__TS_}
 

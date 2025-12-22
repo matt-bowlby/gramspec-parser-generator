@@ -109,7 +109,7 @@ _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if self.content[self.position..].starts_with(string) {
 _TS__TS__TS__TS_self.position += string.len();
-_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(string.to_string()), start_pos)]));
+_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(string.to_string()), start_pos, self.position)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^[^\S\r\n]+").unwrap().find(&self.content[self.position..]) {
 _TS__TS__TS__TS__TS_start_pos += whitespace.end();
@@ -134,6 +134,7 @@ _TS__TS__TS__TS__TS__String,
 _TS__TS__TS__TS__TS_vec![],
 _TS__TS__TS__TS__TS_Some(captures.get(0).unwrap().as_str().to_string()),
 _TS__TS__TS__TS__TS_start_pos,
+_TS__TS__TS__TS__TS_self.position
 _TS__TS__TS__TS_)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_if let Some(whitespace) = Regex::new(r"^[^\S\r\n]+").unwrap().find(&self.content[self.position..]) {
@@ -161,7 +162,7 @@ _TS__TS__TS_.ok_or_else(|| format!("Unknown keyword: {}", keyword))?
 _TS__TS__TS_.to_owned();
 _TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
 _TS__TS__TS_self.position += keyword_value.len();
-_TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos)]));
+_TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos, self.position)]));
 _TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_Ok(None)
@@ -332,6 +333,25 @@ _TS__TS__TS__TS_}
 
 _TS__TS__TS__TS_Ok(nodes)
 _TS__TS__TS_},
+_TS__TS__TS_Expression::Discard(expr) => {
+_TS__TS__TS__TS_let nodes = self.eval(&*expr)?;
+_TS__TS__TS__TS_if nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_let nodes = nodes.unwrap();
+_TS__TS__TS__TS_let last_node  = nodes[nodes.len() - 1].clone();
+_TS__TS__TS__TS_let node = Node::new_with_position(_Discard, vec![], None, self.position, last_node.get_end_pos());
+_TS__TS__TS__TS_Ok(Some(vec![node]))
+_TS__TS__TS_}
+_TS__TS__TS_Expression::Meta(expr) => {
+_TS__TS__TS__TS_let nodes = self.eval(&*expr)?;
+_TS__TS__TS__TS_if nodes.is_none() {
+_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_// Assume that the length of nodes is 1 for Meta, and is a Rule Node
+_TS__TS__TS__TS_let nodes = nodes.unwrap()[0].children.clone();
+_TS__TS__TS__TS_Ok(Some(nodes))
+_TS__TS__TS_}
 _TS__TS_}
 _TS_}
 
@@ -387,6 +407,8 @@ _TS__TS_DelimitRepeatZero(Box<Expression>, Box<Expression>),
 _TS__TS_Optional(Box<Expression>),
 _TS__TS_RepeatOne(Box<Expression>),
 _TS__TS_RepeatZero(Box<Expression>),
+_TS__TS_Discard(Box<Expression>),
+_TS__TS_Meta(Box<Expression>),
 _TS_}
 
 _TS_impl fmt::Debug for Expression {
@@ -403,6 +425,8 @@ _TS__TS__TS__TS_Expression::DelimitRepeatZero(left, right) => write!(f, "({:?}),
 _TS__TS__TS__TS_Expression::Optional(expr) => write!(f, "({:?})?", expr),
 _TS__TS__TS__TS_Expression::RepeatOne(expr) => write!(f, "({:?})+", expr),
 _TS__TS__TS__TS_Expression::RepeatZero(expr) => write!(f, "({:?})*", expr),
+_TS__TS__TS__TS_Expression::Discard(expr) => write!(f, "~({:?})", expr),
+_TS__TS__TS__TS_Expression::Meta(expr) => write!(f, "$({:?})", expr),
 _TS__TS__TS_}
 _TS__TS_}
 _TS_}
@@ -430,6 +454,12 @@ _TS__TS_}
 _TS__TS_pub fn repeat_zero(expr: Expression) -> Self {
 _TS__TS__TS_Expression::RepeatZero(Box::new(expr))
 _TS__TS_}
+_TS__TS_pub fn discard(expr: Expression) -> Self {
+_TS__TS__TS_Expression::Discard(Box::new(expr))
+_TS__TS_}
+_TS__TS_pub fn meta(expr: Expression) -> Self {
+_TS__TS__TS_Expression::Meta(Box::new(expr))
+_TS__TS_}
 _TS_}
 }
 
@@ -439,6 +469,7 @@ _TS_#[derive(Debug, Clone, PartialEq, Eq)]
 _TS_pub enum NodeType {
 _PASCALCASERULENAMES_
 _TS__TS__String,
+_TS__TS__Discard,
 _TS_}
 
 _TS_#[derive(Debug, Clone)]
@@ -446,7 +477,8 @@ _TS_pub struct Node {
 _TS__TS_pub node_type: NodeType,
 _TS__TS_pub children: Vec<Node>,
 _TS__TS_pub value: Option<String>,
-_TS__TS_pub position: usize,
+_TS__TS_pub start_position: usize,
+_TS__TS_pub end_position: usize,
 _TS_}
 
 _TS_impl Node {
@@ -455,7 +487,8 @@ _TS__TS__TS_Node {
 _TS__TS__TS__TS_node_type,
 _TS__TS__TS__TS_children,
 _TS__TS__TS__TS_value,
-_TS__TS__TS__TS_position: 0,
+_TS__TS__TS__TS_start_position: 0,
+_TS__TS__TS__TS_end_position: 0,
 _TS__TS__TS_}
 _TS__TS_}
 
@@ -487,13 +520,15 @@ _TS__TS_pub(super) fn new_with_position(
 _TS__TS__TS_node_type: NodeType,
 _TS__TS__TS_children: Vec<Node>,
 _TS__TS__TS_value: Option<String>,
-_TS__TS__TS_position: usize,
+_TS__TS__TS_start_position: usize,
+_TS__TS__TS_end_position: usize,
 _TS__TS_) -> Self {
 _TS__TS__TS_Node {
 _TS__TS__TS__TS_node_type,
 _TS__TS__TS__TS_children,
 _TS__TS__TS__TS_value,
-_TS__TS__TS__TS_position,
+_TS__TS__TS__TS_start_position,
+_TS__TS__TS__TS_end_position,
 _TS__TS__TS_}
 _TS__TS_}
 
@@ -501,11 +536,7 @@ _TS__TS_pub(super) fn get_end_pos(&self) -> usize {
 _TS__TS__TS_if let Some(last_child) = self.children.last() {
 _TS__TS__TS__TS_last_child.get_end_pos()
 _TS__TS__TS_} else {
-_TS__TS__TS__TS_if let Some(val) = &self.value {
-_TS__TS__TS__TS__TS_self.position + val.len()
-_TS__TS__TS__TS_} else {
-_TS__TS__TS__TS__TS_self.position
-_TS__TS__TS__TS_}
+_TS__TS__TS__TS_self.end_position
 _TS__TS__TS_}
 _TS__TS_}
 
