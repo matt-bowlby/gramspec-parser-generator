@@ -176,6 +176,14 @@ impl Generator {
                     Ok(format!("StringLiteral(\"{}\")", string.value))
                 }
             }
+            Expression::Discard(expr) => Ok(format!(
+                "Expression::discard({})",
+                self.to_conditional(expr)?
+            )),
+            Expression::Meta(expr) => Ok(format!(
+                "Expression::meta({})",
+                self.to_conditional(expr)?
+            )),
             Expression::Or(left, right) => Ok(format!(
                 "Expression::or({}, {})",
                 self.to_conditional(left)?,
