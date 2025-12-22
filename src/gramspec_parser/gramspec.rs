@@ -9,6 +9,7 @@ pub struct GramSpec {
     pub rules: HashMap<String, Vec<Expression>>,
     pub config: GramSpecConfig,
     pub meta_rules: HashMap<String, Vec<Expression>>,
+    pub discard_rules: HashMap<String, Vec<Expression>>,
 }
 
 impl GramSpec {
@@ -17,6 +18,7 @@ impl GramSpec {
             rules: HashMap::new(),
             config: GramSpecConfig::new(),
             meta_rules: HashMap::new(),
+            discard_rules: HashMap::new(),
         }
     }
 
@@ -26,6 +28,9 @@ impl GramSpec {
         }
         if let Some(meta_expression) = self.meta_rules.get(rule_name) {
             return Some(meta_expression);
+        }
+        if let Some(discard_expression) = self.discard_rules.get(rule_name) {
+            return Some(discard_expression);
         }
         None
     }
@@ -37,6 +42,11 @@ impl GramSpec {
     pub fn add_meta_rule(&mut self, name: String, expressions: Vec<Expression>) {
         self.meta_rules.insert(name, expressions);
     }
+
+    pub fn add_discard_rule(&mut self, name: String, expressions: Vec<Expression>) {
+        self.discard_rules.insert(name, expressions);
+    }
+
     pub fn is_left_circular(&self, rule_name: &str) -> bool {
         if let Some(expressions) = self.get_expression(rule_name) {
             for expr in expressions {
@@ -82,6 +92,12 @@ impl GramSpec {
             Expression::RegexLiteral(_) |
             Expression::Keyword(_) => false,
 
+            Expression::Discard(inner) => {
+                self.is_left_circular_expression(original_rule, inner, visited)
+            }
+            Expression::Meta(inner) => {
+                self.is_left_circular_expression(original_rule, inner, visited)
+            }
             Expression::And(left, _right) => {
                 self.is_left_circular_expression(original_rule, left, visited)
             }
