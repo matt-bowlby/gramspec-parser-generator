@@ -216,9 +216,9 @@ impl Generator {
         for i in 0..self.gramspec.rules.keys().len() {
             let rule = self.gramspec.rules.keys().nth(i).unwrap();
             if i < self.gramspec.rules.keys().len() - 1 {
-                result.push_str(&format!("{}{},\n", "_TS_".repeat(2), Self::to_pascal_case(rule)));
+                result.push_str(&format!("_TS__TS_{},\n", Self::to_pascal_case(rule)));
             } else {
-                result.push_str(&format!("{}{},", "_TS_".repeat(2), Self::to_pascal_case(rule)));
+                result.push_str(&format!("_TS__TS_{},", Self::to_pascal_case(rule)));
             }
         }
         result
