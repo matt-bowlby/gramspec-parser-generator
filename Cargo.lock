@@ -12,25 +12,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "gramspec-parser-generator"
+name = "cli"
 version = "0.1.0"
 dependencies = [
- "lazy_static",
- "regex",
- "unescape",
+ "generator",
+ "parser",
 ]
 
 [[package]]
-name = "lazy_static"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+name = "generator"
+version = "0.1.0"
+dependencies = [
+ "parser",
+]
 
 [[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
+
+[[package]]
+name = "parser"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "regex"
@@ -60,9 +67,3 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
-
-[[package]]
-name = "unescape"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccb97dac3243214f8d8507998906ca3e2e0b900bf9bf4870477f125b82e68f6e"

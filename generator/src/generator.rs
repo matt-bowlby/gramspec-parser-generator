@@ -1,13 +1,14 @@
 use std::error::Error;
 use std::io::Write;
 
-use crate::gramspec_parser::gramspec::GramSpec;
-use crate::gramspec_parser::gramspec::expression::Expression;
+use parser::gramspec::GramSpec;
+use parser::node::{Node, NodeType};
 
 pub struct Generator {
     gramspec: GramSpec,
 }
 
+#[allow(dead_code)]
 impl Generator {
     pub fn new(gramspec: GramSpec) -> Self {
         Generator { gramspec }
@@ -158,64 +159,72 @@ impl Generator {
         Ok(rule_functions)
     }
 
-    fn to_conditional(&self, expression: &Expression) -> Result<String, Box<dyn Error>> {
-        match expression {
-            Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
-            Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
-            Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r#\"^{}\"#)", regex.value)),
-            Expression::StringLiteral(string) => {
-                if string.value == "\"" {
+    fn to_conditional(&self, node: &Node) -> Result<String, Box<dyn Error>> {
+        match node.node_type {
+            NodeType::Identifier => Ok(format!("Rule(\"{}\")", node.value.as_ref().unwrap())),
+            NodeType::Regex => Ok(format!("RegexLiteral(r#\"^{}\"#)", node.value.as_ref().unwrap())),
+            NodeType::String => {
+                if *node.value.as_ref().unwrap() == "\"" {
                     Ok("StringLiteral(\"\\\"\")".to_string())
-                } else if string.value == "\\" {
+                } else if *node.value.as_ref().unwrap() == "\\" {
                     Ok("StringLiteral(\"\\\\\")".to_string())
-                } else if string.value == "\n" {
+                } else if *node.value.as_ref().unwrap() == "\n" {
                     Ok("StringLiteral(\"\\n\")".to_string())
-                } else if string.value == "\t" {
+                } else if *node.value.as_ref().unwrap() == "\t" {
                     Ok("StringLiteral(\"\\t\")".to_string())
                 } else {
-                    Ok(format!("StringLiteral(\"{}\")", string.value))
+                    Ok(format!("StringLiteral(\"{}\")", node.value.as_ref().unwrap()))
                 }
             }
-            Expression::Discard(expr) => Ok(format!(
+            NodeType::DiscardValue => Ok(format!(
                 "Expression::discard({})",
-                self.to_conditional(expr)?
+                self.to_conditional(&node.children[0])?
             )),
-            Expression::Meta(expr) => Ok(format!(
+            NodeType::MetaValue => Ok(format!(
                 "Expression::meta({})",
-                self.to_conditional(expr)?
+                self.to_conditional(&node.children[0])?
             )),
-            Expression::Or(left, right) => Ok(format!(
+            NodeType::Or => Ok(format!(
                 "Expression::or({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                self.to_conditional(&node.children[0])?,
+                self.to_conditional(&node.children[1])?
             )),
-            Expression::And(left, right) => Ok(format!(
+            NodeType::And => Ok(format!(
                 "Expression::and({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                self.to_conditional(&node.children[0])?,
+                self.to_conditional(&node.children[1])?
             )),
-            Expression::DelimitRepeatOne(left, right) => Ok(format!(
+            NodeType::DelimitRepeatOne => Ok(format!(
                 "Expression::delimit_repeat_one({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                self.to_conditional(&node.children[0])?,
+                self.to_conditional(&node.children[1])?
             )),
-            Expression::DelimitRepeatZero(left, right) => Ok(format!(
+            NodeType::DelimitRepeatZero => Ok(format!(
                 "Expression::delimit_repeat_zero({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                self.to_conditional(&node.children[0])?,
+                self.to_conditional(&node.children[1])?
             )),
-            Expression::Optional(expr) => Ok(format!(
+            NodeType::Optional => Ok(format!(
                 "Expression::optional({})",
-                self.to_conditional(expr)?
+                self.to_conditional(&node.children[0])?
             )),
-            Expression::RepeatOne(expr) => Ok(format!(
+            NodeType::RepeatOne => Ok(format!(
                 "Expression::repeat_one({})",
-                self.to_conditional(expr)?
+                self.to_conditional(&node.children[0])?
             )),
-            Expression::RepeatZero(expr) => Ok(format!(
+            NodeType::RepeatZero => Ok(format!(
                 "Expression::repeat_zero({})",
-                self.to_conditional(expr)?
+                self.to_conditional(&node.children[0])?
             )),
+            NodeType::Group => {
+                Ok(format!(
+                    "({})",
+                    &node.iter_children()
+                        .map(|child| self.to_conditional(child))
+                        .collect::<Result<Vec<String>, Box<dyn Error>>>()?
+                        .join(", ")
+                ))
+            },
         }
     }
 
