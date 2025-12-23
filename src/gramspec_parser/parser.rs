@@ -1,9 +1,9 @@
 use std::error::Error;
 
-use crate::gramspec_parser::token;
 use crate::gramspec_parser::gramspec;
+use crate::gramspec_parser::token;
+use gramspec::{GramSpec, expression::Expression};
 use token::{Token, token_type::TokenType};
-use gramspec::{expression::Expression, GramSpec};
 
 mod tokenizer;
 
@@ -31,12 +31,14 @@ impl Parser {
         let mut rules: Vec<Structure> = Vec::new();
         let mut config_directives: Vec<Structure> = Vec::new();
         let mut meta_rules: Vec<Structure> = Vec::new();
+        let mut discard_rules: Vec<Structure> = Vec::new();
 
         for structure in &self.structures {
             match structure.structure_type {
                 StructureType::RuleDefinition => rules.push(structure.clone()),
                 StructureType::ConfigDirective => config_directives.push(structure.clone()),
                 StructureType::MetaRuleDefinition => meta_rules.push(structure.clone()),
+                StructureType::DiscardRuleDefinition => discard_rules.push(structure.clone()),
             }
         }
 
@@ -49,10 +51,7 @@ impl Parser {
             let and_phrase = &self.add_implict_ands(&phrase.to_vec());
             let expression = self.to_expression(and_phrase.to_vec())?;
             let alternatives = self.split_into_alternatives(&expression);
-            gramspec.add_rule(
-                rule.tokens[0].value.clone(),
-                alternatives
-            );
+            gramspec.add_rule(rule.tokens[0].value.clone(), alternatives);
         }
 
         for meta_rule in &meta_rules {
@@ -60,19 +59,23 @@ impl Parser {
             let and_phrase = &self.add_implict_ands(&phrase.to_vec());
             let expression = self.to_expression(and_phrase.to_vec())?;
             let alternatives = self.split_into_alternatives(&expression);
-            gramspec.add_meta_rule(
-                meta_rule.tokens[0].value.clone(),
-                alternatives
-            );
+            gramspec.add_meta_rule(meta_rule.tokens[0].value.clone(), alternatives);
+        }
+
+        for discard_rule in &discard_rules {
+            let phrase = &discard_rule.tokens[1..];
+            let and_phrase = &self.add_implict_ands(&phrase.to_vec());
+            let expression = self.to_expression(and_phrase.to_vec())?;
+            let alternatives = self.split_into_alternatives(&expression);
+            gramspec.add_discard_rule(discard_rule.tokens[0].value.clone(), alternatives);
         }
 
         for config_directive in &mut config_directives {
             let directive_name = &config_directive.tokens[0].value;
             let directive_value = &config_directive.tokens[1].value;
-            gramspec.config.set(
-                directive_name.clone(),
-                directive_value.clone()
-            )?;
+            gramspec
+                .config
+                .set(directive_name.clone(), directive_value.clone())?;
         }
 
         Ok(gramspec)
@@ -81,10 +84,7 @@ impl Parser {
     fn structurize(&mut self) -> Result<Vec<Structure>, Box<dyn Error>> {
         let mut structures = Vec::new();
         while self.position < self.tokens.len() {
-            let mut structure = Structure::new(
-                Vec::new(),
-                StructureType::RuleDefinition
-            );
+            let mut structure = Structure::new(Vec::new(), StructureType::RuleDefinition);
             let initial_pos = self.position;
             let mut longest_pos = 0;
 
@@ -114,14 +114,25 @@ impl Parser {
                 }
             }
 
+            // Reset position
+            self.position = initial_pos;
+            // Try to parse a discard rule definition
+            if let Some(new_structure) = self.expect_discard_rule_definition()? {
+                if self.position > longest_pos {
+                    structure = new_structure;
+                    longest_pos = self.position;
+                }
+            }
+
             if longest_pos == 0 {
-                let (line, column) = self.tokenizer.get_line_column(self.tokens[self.position].position);
+                let (line, column) = self
+                    .tokenizer
+                    .get_line_column(self.tokens[self.position].position);
                 return Err(format!(
                     "Unexpected token at position {}:{}: {:?}",
-                    line,
-                    column,
-                    self.tokens[self.position].token_type
-                ).into());
+                    line, column, self.tokens[self.position].token_type
+                )
+                .into());
             }
 
             // Set position to the end of the structure
@@ -133,15 +144,12 @@ impl Parser {
     }
 
     fn expect_config_directive(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
-        let mut structure = Structure::new(
-            Vec::new(),
-            StructureType::ConfigDirective
-        );
+        let mut structure = Structure::new(Vec::new(), StructureType::ConfigDirective);
 
         // Read the config directive token, don't bother adding it to the structure
         if self.tokens[self.position].token_type == TokenType::ConfigDirective {
             self.position += 1;
-        }else {
+        } else {
             return Ok(None);
         }
 
@@ -152,9 +160,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected config directive name at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read open paren token, don't bother adding it to the structure
@@ -163,9 +171,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected '(' at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read the config directive value token
@@ -175,9 +183,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected config directive value at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read close paren token, don't bother adding it to the structure
@@ -186,9 +194,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected ')' at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read endline token, don't bother adding it to the structure
@@ -197,19 +205,16 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected endline at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         Ok(Some(structure))
     }
 
     fn expect_rule_definition(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
-        let mut structure = Structure::new(
-            Vec::new(),
-            StructureType::RuleDefinition
-        );
+        let mut structure = Structure::new(Vec::new(), StructureType::RuleDefinition);
 
         // Read the rule name token
         if self.tokens[self.position].token_type == TokenType::RuleName {
@@ -225,9 +230,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected ':' at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read tokens until we reach a newline or end of input
@@ -244,13 +249,10 @@ impl Parser {
     }
 
     fn expect_meta_rule_definition(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
-        let mut structure = Structure::new(
-            Vec::new(),
-            StructureType::MetaRuleDefinition
-        );
+        let mut structure = Structure::new(Vec::new(), StructureType::MetaRuleDefinition);
 
         // Read the meta rule token, don't bother adding it to the structure
-        if self.tokens[self.position].token_type == TokenType::MetaRule {
+        if self.tokens[self.position].token_type == TokenType::Meta {
             self.position += 1;
         } else {
             return Ok(None);
@@ -263,9 +265,9 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected meta rule name at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read the rule definition token, don't bother adding it to the structure
@@ -274,9 +276,55 @@ impl Parser {
         } else {
             return Err(format!(
                 "Expected ':' at position {}, found {:?}",
-                self.tokens[self.position].position,
-                self.tokens[self.position].token_type
-            ).into());
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
+        }
+
+        // Read tokens until we reach a newline or end of input
+        while self.position < self.tokens.len() {
+            if self.tokens[self.position].token_type == TokenType::Newline {
+                self.position += 1;
+                break;
+            }
+            structure.tokens.push(self.tokens[self.position].clone());
+            self.position += 1;
+        }
+
+        Ok(Some(structure))
+    }
+
+    fn expect_discard_rule_definition(&mut self) -> Result<Option<Structure>, Box<dyn Error>> {
+        let mut structure = Structure::new(Vec::new(), StructureType::DiscardRuleDefinition);
+
+        // Read the discard rule token, don't bother adding it to the structure
+        if self.tokens[self.position].token_type == TokenType::Discard {
+            self.position += 1;
+        } else {
+            return Ok(None);
+        }
+
+        // Read the discard rule name token
+        if self.tokens[self.position].token_type == TokenType::RuleName {
+            structure.tokens.push(self.tokens[self.position].clone());
+            self.position += 1;
+        } else {
+            return Err(format!(
+                "Expected discard rule name at position {}, found {:?}",
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
+        }
+
+        // Read the rule definition token, don't bother adding it to the structure
+        if self.tokens[self.position].token_type == TokenType::RuleDefinition {
+            self.position += 1;
+        } else {
+            return Err(format!(
+                "Expected ':' at position {}, found {:?}",
+                self.tokens[self.position].position, self.tokens[self.position].token_type
+            )
+            .into());
         }
 
         // Read tokens until we reach a newline or end of input
@@ -309,11 +357,19 @@ impl Parser {
             if token.token_type == TokenType::Or {
                 continue;
             }
+            if token.token_type == TokenType::Discard {
+                continue;
+            }
+            if token.token_type == TokenType::Meta {
+                continue;
+            }
 
             if next_token.token_type == TokenType::CloseParen {
                 continue;
             }
-            if next_token.token_type.is_operator() {
+            if next_token.token_type.is_operator()
+                && !matches!(next_token.token_type, TokenType::Discard | TokenType::Meta)
+            {
                 continue;
             }
 
@@ -334,18 +390,19 @@ impl Parser {
     }
 
     fn to_expression(&self, tokens: Vec<Token>) -> Result<Expression, Box<dyn Error>> {
-
         // Conversion from infix to postfix notation
 
         let mut postfix: Vec<Token> = Vec::new();
         let mut stack: Vec<Token> = Vec::new();
 
         for token in tokens {
-            if token.token_type.is_unary_operator() {
-                if
-                    !stack.is_empty()
+            if token.token_type.is_unary_operator()
+                && !matches!(token.token_type, TokenType::Discard | TokenType::Meta)
+            {
+                if !stack.is_empty()
                     && stack.last().unwrap().token_type == TokenType::DelimitRepeat
-                    && (token.token_type == TokenType::RepeatOne || token.token_type == TokenType::RepeatZero)
+                    && (token.token_type == TokenType::RepeatOne
+                        || token.token_type == TokenType::RepeatZero)
                 {
                     postfix.push(stack.pop().unwrap());
                 }
@@ -355,8 +412,19 @@ impl Parser {
                     stack.push(token);
                 } else {
                     while let Some(top) = stack.last() {
-                        if top.token_type.is_operator() && top.token_type.get_precedence() >= token.token_type.get_precedence() {
-                            postfix.push(stack.pop().unwrap());
+                        if top.token_type.is_operator() {
+                            let top_prec = top.token_type.get_precedence();
+                            let token_prec = token.token_type.get_precedence();
+                            let is_right_associative =
+                                matches!(token.token_type, TokenType::Discard | TokenType::Meta);
+
+                            if (is_right_associative && top_prec > token_prec)
+                                || (!is_right_associative && top_prec >= token_prec)
+                            {
+                                postfix.push(stack.pop().unwrap());
+                            } else {
+                                break;
+                            }
                         } else {
                             break;
                         }
@@ -380,10 +448,7 @@ impl Parser {
         while stack.len() > 0 {
             let top = stack.pop().unwrap();
             if top.token_type == TokenType::OpenParen {
-                return Err(format!(
-                    "Unmatched '(' at position {}",
-                    top.position
-                ).into());
+                return Err(format!("Unmatched '(' at position {}", top.position).into());
             }
             postfix.push(top);
         }
@@ -401,7 +466,6 @@ impl Parser {
             }
         }
 
-
         let mut operands: Vec<Expression> = Vec::new();
 
         let mut i = 0;
@@ -415,27 +479,23 @@ impl Parser {
                 TokenType::Keyword => Expression::Keyword(token.clone()),
 
                 // Unary operators
-                TokenType::RepeatOne => {
-                    Expression::RepeatOne(Box::new(operands.pop().unwrap()))
-                },
-                TokenType::RepeatZero => {
-                    Expression::RepeatZero(Box::new(operands.pop().unwrap()))
-                },
-                TokenType::Optional => {
-                    Expression::Optional(Box::new(operands.pop().unwrap()))
-                }
+                TokenType::RepeatOne => Expression::RepeatOne(Box::new(operands.pop().unwrap())),
+                TokenType::RepeatZero => Expression::RepeatZero(Box::new(operands.pop().unwrap())),
+                TokenType::Optional => Expression::Optional(Box::new(operands.pop().unwrap())),
+                TokenType::Discard => Expression::Discard(Box::new(operands.pop().unwrap())),
+                TokenType::Meta => Expression::Meta(Box::new(operands.pop().unwrap())),
 
                 // Binary operators
                 TokenType::And => {
                     let right = operands.pop().unwrap();
                     let left = operands.pop().unwrap();
                     Expression::And(Box::new(left), Box::new(right))
-                },
+                }
                 TokenType::Or => {
                     let right = operands.pop().unwrap();
                     let left = operands.pop().unwrap();
                     Expression::Or(Box::new(left), Box::new(right))
-                },
+                }
                 TokenType::DelimitRepeat => {
                     if postfix[i + 1].token_type == TokenType::RepeatOne {
                         i += 1; // Skip the RepeatOne token
@@ -451,16 +511,17 @@ impl Parser {
                         return Err(format!(
                             "Expected RepeatOne or RepeatZero after DelimitRepeat at position {}",
                             token.position
-                        ).into());
+                        )
+                        .into());
                     }
                 }
 
                 _ => {
                     return Err(format!(
                         "Unexpected token {:?} at position {}",
-                        token.token_type,
-                        token.position
-                    ).into());
+                        token.token_type, token.position
+                    )
+                    .into());
                 }
             };
 
@@ -478,11 +539,10 @@ impl Parser {
                 let mut alternatives = self.split_into_alternatives(left);
                 alternatives.extend(self.split_into_alternatives(right));
                 alternatives
-            },
+            }
             _ => vec![expression.clone()],
         }
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -490,6 +550,7 @@ pub enum StructureType {
     ConfigDirective,
     RuleDefinition,
     MetaRuleDefinition,
+    DiscardRuleDefinition,
 }
 
 #[derive(Debug, Clone)]
@@ -500,7 +561,9 @@ pub struct Structure {
 
 impl Structure {
     pub fn new(tokens: Vec<Token>, structure_type: StructureType) -> Self {
-        Structure { tokens, structure_type }
+        Structure {
+            tokens,
+            structure_type,
+        }
     }
 }
-

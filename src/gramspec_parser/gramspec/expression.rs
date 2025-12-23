@@ -14,6 +14,8 @@ pub enum Expression {
     Optional(Box<Expression>),
     RepeatOne(Box<Expression>),
     RepeatZero(Box<Expression>),
+    Discard(Box<Expression>),
+    Meta(Box<Expression>),
 }
 
 impl fmt::Debug for Expression {
@@ -30,6 +32,8 @@ impl fmt::Debug for Expression {
             Expression::Optional(expr) => write!(f, "({:?})?", expr),
             Expression::RepeatOne(expr) => write!(f, "({:?})+", expr),
             Expression::RepeatZero(expr) => write!(f, "({:?})*", expr),
+            Expression::Discard(expr) => write!(f, "~({:?})", expr),
+            Expression::Meta(expr) => write!(f, "$({:?})", expr),
         }
     }
 }

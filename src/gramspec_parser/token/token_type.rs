@@ -15,9 +15,10 @@ lazy_static! {
     static ref OPTIONAL_REGEX: Regex = Regex::new(r"^\?").unwrap();
     static ref OPEN_PAREN_REGEX: Regex = Regex::new(r"^\(").unwrap();
     static ref CLOSE_PAREN_REGEX: Regex = Regex::new(r"^\)").unwrap();
+    static ref DISCARD_REGEX: Regex = Regex::new(r"^~").unwrap();
+    static ref META_REGEX: Regex = Regex::new(r"^\$").unwrap();
     static ref RULE_DEF_REGEX: Regex = Regex::new(r"^:").unwrap();
     static ref CONFIG_DIRECTIVE_REGEX: Regex = Regex::new(r"^@").unwrap();
-    static ref META_RULE_REGEX: Regex = Regex::new(r"^\$").unwrap();
     static ref COMMENT_REGEX: Regex = Regex::new(r"^#[^\r\n]*").unwrap();
     static ref WHITESPACE_REGEX: Regex = Regex::new(r"^[ \t\f\v]+").unwrap();
     static ref ENDLINE_REGEX: Regex = Regex::new(r"^(\r\n|\n|\r)+").unwrap();
@@ -40,11 +41,12 @@ pub enum TokenType {
     Optional,
     OpenParen,
     CloseParen,
+    Discard,
+    Meta,
 
     // Special Characters
     RuleDefinition,
     ConfigDirective,
-    MetaRule,
     Comment,
 
     // Miscellaneous
@@ -64,22 +66,32 @@ impl TokenType {
                 | TokenType::RepeatOne
                 | TokenType::RepeatZero
                 | TokenType::Optional
+                | TokenType::Discard
+                | TokenType::Meta
         )
     }
 
     /// Returns true if the token type is a unary operator.
     pub fn is_unary_operator(&self) -> bool {
-        matches!(self, TokenType::Optional | TokenType::RepeatOne | TokenType::RepeatZero)
+        matches!(
+            self,
+            TokenType::Optional | TokenType::RepeatOne | TokenType::RepeatZero | TokenType::Discard | TokenType::Meta
+        )
     }
 
     /// Returns true if the token type is a binary operator.
     pub fn is_binary_operator(&self) -> bool {
-        matches!(self, TokenType::Or | TokenType::And | TokenType::DelimitRepeat)
+        matches!(
+            self,
+            TokenType::Or | TokenType::And | TokenType::DelimitRepeat
+        )
     }
 
     /// Returns the precedence of the operator. Higher values indicate higher precedence.
     pub fn get_precedence(&self) -> u8 {
         match self {
+            TokenType::Meta => 7,
+            TokenType::Discard => 6,
             TokenType::DelimitRepeat => 5,
             TokenType::RepeatOne => 4,
             TokenType::RepeatZero => 4,
@@ -105,9 +117,10 @@ impl TokenType {
             TokenType::Optional => &OPTIONAL_REGEX,
             TokenType::OpenParen => &OPEN_PAREN_REGEX,
             TokenType::CloseParen => &CLOSE_PAREN_REGEX,
+            TokenType::Discard => &DISCARD_REGEX,
+            TokenType::Meta => &META_REGEX,
             TokenType::RuleDefinition => &RULE_DEF_REGEX,
             TokenType::ConfigDirective => &CONFIG_DIRECTIVE_REGEX,
-            TokenType::MetaRule => &META_RULE_REGEX,
             TokenType::Comment => &COMMENT_REGEX,
             TokenType::Whitespace => &WHITESPACE_REGEX,
             TokenType::Newline => &ENDLINE_REGEX,
@@ -119,11 +132,9 @@ impl TokenType {
         match self {
             TokenType::RegexLiteral => {
                 let string = value.strip_prefix('r').unwrap();
-                string[1..string.len()-1].to_string()
+                string[1..string.len() - 1].to_string()
             }
-            TokenType::StringLiteral => {
-                unescape(&value[1..value.len()-1]).unwrap()
-            }
+            TokenType::StringLiteral => unescape(&value[1..value.len() - 1]).unwrap(),
             // No transformation needed for other token types
             _ => value.clone(),
         }
@@ -135,7 +146,6 @@ impl TokenType {
             TokenType::StringLiteral,
             TokenType::RuleName,
             TokenType::Keyword,
-
             // Operators
             TokenType::Or,
             TokenType::And,
@@ -145,13 +155,12 @@ impl TokenType {
             TokenType::Optional,
             TokenType::OpenParen,
             TokenType::CloseParen,
-
+            TokenType::Discard,
+            TokenType::Meta,
             // Special Characters
             TokenType::RuleDefinition,
             TokenType::ConfigDirective,
-            TokenType::MetaRule,
             TokenType::Comment,
-
             // Miscellaneous
             TokenType::Whitespace,
             TokenType::Newline,

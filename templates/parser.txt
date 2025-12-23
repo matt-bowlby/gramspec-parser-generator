@@ -45,6 +45,7 @@ _TS_pub fn parse(&mut self, input: std::string::String) -> Result<Option<Node>, 
 _TS__TS_self.position = 0;
 _TS__TS_self.content = input;
 _TS__TS_if let Some(nodes) = self.__ENTRYRULE_()? {
+_TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
 _TS__TS__TS_return Ok(Some(nodes[0].clone()));
 _TS__TS_}
 _TS__TS_Ok(None)
@@ -53,6 +54,16 @@ _TS_}
 _TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {
 _TS__TS_let content = std::fs::read_to_string(file_path)?;
 _TS__TS_self.parse(content)
+_TS_}
+
+_TS_fn clear_discard_nodes(&self, nodes: Vec<Node>) -> Vec<Node> {
+_TS__TS_nodes.into_iter()
+_TS__TS__TS_.filter(|node| node.node_type != _Discard)
+_TS__TS__TS_.map(|mut node| {
+_TS__TS__TS__TS_node.children = self.clear_discard_nodes(node.children);
+_TS__TS__TS__TS_node
+_TS__TS__TS_})
+_TS__TS__TS_.collect()
 _TS_}
 
 _TS_fn circular_wrapper(&mut self, rule_name: std::string::String) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
@@ -339,6 +350,9 @@ _TS__TS__TS__TS_if nodes.is_none() {
 _TS__TS__TS__TS__TS_return Ok(None);
 _TS__TS__TS__TS_}
 _TS__TS__TS__TS_let nodes = nodes.unwrap();
+_TS__TS__TS__TS_if nodes.len() == 0 {
+_TS__TS__TS__TS__TS_return Ok(Some(vec![]));
+_TS__TS__TS__TS_}
 _TS__TS__TS__TS_let last_node  = nodes[nodes.len() - 1].clone();
 _TS__TS__TS__TS_let node = Node::new_with_position(_Discard, vec![], None, self.position, last_node.get_end_pos());
 _TS__TS__TS__TS_Ok(Some(vec![node]))
@@ -388,6 +402,8 @@ _TS_}
 _RULEFUNCTIONS_
 
 _METARULEFUNCTIONS_
+
+_DISCARDRULEFUNCTIONS_
 }
 
 mod expression {
