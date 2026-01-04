@@ -1,5 +1,5 @@
 _TS__TS__TS_"_RULENAME_" => {
-_TS__TS__TS__TS_if protected {
+_TS__TS__TS__TS_if _protected {
 _TS__TS__TS__TS__TS_self.circular_wrapper("_RULENAME_".to_string())
 _TS__TS__TS__TS_}
 _TS__TS__TS__TS_else {

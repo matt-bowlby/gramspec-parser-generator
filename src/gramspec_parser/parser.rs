@@ -78,6 +78,13 @@ impl Parser {
                 .set(directive_name.clone(), directive_value.clone())?;
         }
 
+        // Loop through ignore_between rules and remove them from the normal rule lists
+        for ignore_rule in &gramspec.config.ignore_between {
+            gramspec.rules.remove(ignore_rule);
+            gramspec.meta_rules.remove(ignore_rule);
+            gramspec.discard_rules.remove(ignore_rule);
+        }
+
         Ok(gramspec)
     }
 
@@ -166,34 +173,23 @@ impl Parser {
         }
 
         // Read open paren token, don't bother adding it to the structure
-        if self.tokens[self.position].token_type == TokenType::OpenParen {
+        if self.tokens[self.position].token_type == TokenType::RuleDefinition {
             self.position += 1;
         } else {
             return Err(format!(
-                "Expected '(' at position {}, found {:?}",
+                "Expected ':' at position {}, found {:?}",
                 self.tokens[self.position].position, self.tokens[self.position].token_type
             )
             .into());
         }
 
         // Read the config directive value token
-        if self.tokens[self.position].token_type == TokenType::StringLiteral {
+        if self.tokens[self.position].token_type == TokenType::RegexLiteral {
             structure.tokens.push(self.tokens[self.position].clone());
             self.position += 1;
         } else {
             return Err(format!(
-                "Expected config directive value at position {}, found {:?}",
-                self.tokens[self.position].position, self.tokens[self.position].token_type
-            )
-            .into());
-        }
-
-        // Read close paren token, don't bother adding it to the structure
-        if self.tokens[self.position].token_type == TokenType::CloseParen {
-            self.position += 1;
-        } else {
-            return Err(format!(
-                "Expected ')' at position {}, found {:?}",
+                "Expected config directive regex value at position {}, found {:?}",
                 self.tokens[self.position].position, self.tokens[self.position].token_type
             )
             .into());

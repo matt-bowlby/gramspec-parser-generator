@@ -21,6 +21,7 @@ impl Generator {
         let meta_rule_functions = self.generate_meta_rule_functions()?;
         let discard_rule_functions = self.generate_discard_rule_functions()?;
         let node_types = self.node_types();
+        let ignore_between = self.generate_ignore_between()?;
 
         // Initialize contents
         let mut contents = String::new();
@@ -36,6 +37,8 @@ impl Generator {
         contents = contents.replace("_METARULEFUNCTIONS_", &meta_rule_functions);
         contents = contents.replace("_DISCARDRULEFUNCTIONS_", &discard_rule_functions);
         contents = contents.replace("_PASCALCASERULENAMES_", &node_types);
+        contents = contents.replace("_IGNOREBETWEEN_", &ignore_between);
+        contents = contents.replace("_IGNOREBETWEENLENGTH_", &self.gramspec.config.ignore_between.len().to_string());
         contents = contents.replace("_TS_", tab_string); // Replace tab spaces
 
         // Write to output file
@@ -194,6 +197,17 @@ impl Generator {
         }
 
         Ok(rule_functions)
+    }
+
+    fn generate_ignore_between(&self) -> Result<String, Box<dyn Error>> {
+        let mut result = String::new();
+        for token in &self.gramspec.config.ignore_between {
+            if !result.is_empty() {
+                result.push_str(",\n");
+            }
+            result.push_str(&format!("_TS__TS__TS_r#\"{}\"#", token));
+        }
+        Ok(result)
     }
 
     fn to_conditional(&self, expression: &Expression) -> Result<String, Box<dyn Error>> {
