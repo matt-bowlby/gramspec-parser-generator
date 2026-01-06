@@ -5,6 +5,8 @@ use crate::gramspec_parser::token;
 use gramspec::{GramSpec, expression::Expression};
 use token::{Token, token_type::TokenType};
 
+use regex::escape;
+
 mod tokenizer;
 
 pub struct Parser {
@@ -71,8 +73,17 @@ impl Parser {
         }
 
         for config_directive in &mut config_directives {
-            let directive_name = &config_directive.tokens[0].value;
-            let directive_value = &config_directive.tokens[1].value;
+            let directive_name = &config_directive.tokens[0].value.clone();
+            let value_type = &config_directive.tokens[1].token_type;
+            let directive_value = {
+                if value_type == &TokenType::RegexLiteral {
+                    config_directive.tokens[1].value.clone()
+                } else {
+                    // Escapes the string literal value so that quotes and backslashes are handled correctly
+                    escape(&config_directive.tokens[1].value)
+                }
+            };
+
             gramspec
                 .config
                 .set(directive_name.clone(), directive_value.clone())?;
@@ -172,7 +183,7 @@ impl Parser {
             .into());
         }
 
-        // Read open paren token, don't bother adding it to the structure
+        // Read colon token, don't bother adding it to the structure
         if self.tokens[self.position].token_type == TokenType::RuleDefinition {
             self.position += 1;
         } else {
@@ -184,15 +195,18 @@ impl Parser {
         }
 
         // Read the config directive value token
-        if self.tokens[self.position].token_type == TokenType::RegexLiteral {
-            structure.tokens.push(self.tokens[self.position].clone());
-            self.position += 1;
-        } else {
-            return Err(format!(
-                "Expected config directive regex value at position {}, found {:?}",
-                self.tokens[self.position].position, self.tokens[self.position].token_type
-            )
-            .into());
+        match self.tokens[self.position].token_type {
+            TokenType::StringLiteral | TokenType::RegexLiteral => {
+                structure.tokens.push(self.tokens[self.position].clone());
+                self.position += 1;
+            }
+            _ => {
+                return Err(format!(
+                    "Expected string or regex value at position {}, found {:?}",
+                    self.tokens[self.position].position, self.tokens[self.position].token_type
+                )
+                .into());
+            }
         }
 
         // Read endline token, don't bother adding it to the structure
