@@ -27,8 +27,8 @@ fn main() {
         generator.generate("./src/parser.rs", "GramspecParser", "    ").unwrap();
     } else {
         GramspecParser::new()
-            // .enable_debug()
-            .parse_file("test_files/gramspec.grm")
+            .enable_debug()
+            .parse_file("test_files/directive_test.grm")
             .unwrap()
             .unwrap()
             .pretty_print();

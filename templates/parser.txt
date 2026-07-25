@@ -14,6 +14,7 @@ pub struct _PARSERNAME_ {
 _TS_pub position: usize,
 _TS_pub debug: bool,
 
+_TS_debug_indent_level: usize,
 _TS_content: std::string::String,
 _TS_memos: HashMap<usize, HashMap<std::string::String, Box<Option<Vec<Node>>>>>,
 }
@@ -21,7 +22,7 @@ _TS_memos: HashMap<usize, HashMap<std::string::String, Box<Option<Vec<Node>>>>>,
 #[allow(dead_code)]
 impl _PARSERNAME_ {
 _TS_pub fn new() -> Self {
-_TS__TS__PARSERNAME_ { content: std::string::String::new(), position: 0, memos: HashMap::new(), debug: false }
+_TS__TS__PARSERNAME_ { content: std::string::String::new(), position: 0, memos: HashMap::new(), debug: false, debug_indent_level: 0 }
 _TS_}
 
 _TS_pub fn enable_debug(mut self) -> Self {
@@ -31,13 +32,26 @@ _TS_}
 
 _TS_fn debug_log(&self, message: &str) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("DEBUG: {} | Position: {} | Next chars: {:?}",
+_TS__TS__TS_println!("{}DEBUG: \x1b[34m{}\x1b[0m | Position: {} | Next chars: {:?}",
+_TS__TS__TS__TS_"_TS_".repeat(self.debug_indent_level),
 _TS__TS__TS__TS_message,
 _TS__TS__TS__TS_self.position,
 _TS__TS__TS__TS_self.content.chars().skip(self.position).take(20).collect::<std::string::String>()
 _TS__TS__TS_);
 _TS__TS__TS_let mut input = std::string::String::new();
 _TS__TS__TS_std::io::stdin().read_line(&mut input).unwrap();
+_TS__TS_}
+_TS_}
+
+_TS_fn pass(&self) {
+_TS__TS_if self.debug {
+_TS__TS__TS_println!("{}\x1b[32mPASS\x1b[0m\n", "    ".repeat(self.debug_indent_level));
+_TS__TS_}
+_TS_}
+
+_TS_fn fail(&self) {
+_TS__TS_if self.debug {
+_TS__TS__TS_println!("{}\x1b[31mFAIL\x1b[0m\n", "    ".repeat(self.debug_indent_level));
 _TS__TS_}
 _TS_}
 
@@ -120,6 +134,7 @@ _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if self.content[self.position..].starts_with(string) {
 _TS__TS__TS__TS_self.position += string.len();
+_TS__TS__TS__TS_self.pass();
 _TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(string.to_string()), start_pos, self.position)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_self.__ignore_between()?;
@@ -131,6 +146,7 @@ _TS__TS__TS__TS_start_pos = self.position;
 _TS__TS__TS_}
 _TS__TS_}
 _TS__TS_self.position = start_pos;
+_TS__TS_self.fail();
 _TS__TS_Ok(None)
 _TS_}
 
@@ -140,6 +156,7 @@ _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
 _TS__TS__TS__TS_self.position += captures.get(0).unwrap().end();
+_TS__TS__TS__TS_self.pass();
 _TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(
 _TS__TS__TS__TS__TS__String,
 _TS__TS__TS__TS__TS_vec![],
@@ -157,6 +174,7 @@ _TS__TS__TS__TS_start_pos = self.position;
 _TS__TS__TS_}
 _TS__TS_}
 _TS__TS_self.position = start_pos;
+_TS__TS_self.fail();
 _TS__TS_Ok(None)
 _TS_}
 
@@ -173,9 +191,11 @@ _TS__TS__TS_.ok_or_else(|| format!("Unknown keyword: {}", keyword))?
 _TS__TS__TS_.to_owned();
 _TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
 _TS__TS__TS_self.position += keyword_value.len();
+_TS__TS__TS_self.pass();
 _TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos, self.position)]));
 _TS__TS_}
 _TS__TS_self.position = start_pos;
+_TS__TS_self.fail();
 _TS__TS_Ok(None)
 _TS_}
 
@@ -183,8 +203,10 @@ _TS_fn eval(&mut self, expression: &Expression) -> Result<Option<Vec<Node>>, Box
 _TS__TS_match expression {
 _TS__TS__TS_Expression::Rule(rule) => {
 _TS__TS__TS__TS_if let Some(nodes) = self.call_rule(rule, true)? {
+_TS__TS__TS__TS__TS_self.debug_indent_level -= 1;
 _TS__TS__TS__TS__TS_Ok(Some(nodes))
 _TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_self.debug_indent_level -= 1;
 _TS__TS__TS__TS__TS_Ok(None)
 _TS__TS__TS__TS_}
 _TS__TS__TS_},
@@ -393,6 +415,7 @@ _TS_}
 
 _TS_fn call_rule(&mut self, rule_name: &str, _protected: bool) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
 _TS__TS_self.debug_log(&format!("Calling rule: {}", rule_name));
+_TS__TS_self.debug_indent_level += 1;
 _TS__TS_match rule_name {
 _RULECASES_
 _TS__TS__TS__ => Err(format!("Unknown rule: {}", rule_name).into()),
