@@ -1,7 +1,8 @@
 target/
 .vscode/
-test_files/
 
 parser.rs
 
 .megaignore
+
+temp/
