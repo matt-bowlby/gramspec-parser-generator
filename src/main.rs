@@ -1,5 +1,5 @@
-mod gramspec_parser;
 mod generator;
+mod gramspec_parser;
 mod parser;
 
 use gramspec_parser::parser::Parser;
@@ -13,8 +13,8 @@ fn main() {
 
     if generate {
         // Read the grammar specification and code files
-        let gramspec = fs::read_to_string("test_files/gramspec.grm").unwrap();
-        // let code = fs::read_to_string("test_files/test.txt").unwrap();
+        let gramspec = fs::read_to_string("temp/gramspec.grm").unwrap();
+        // let code = fs::read_to_string("temp/test.txt").unwrap();
         // Tokenize the grammar specification
         let mut parser = Parser::new(gramspec);
         // Tokenize the input string
@@ -24,13 +24,20 @@ fn main() {
         });
         // Generate the parser code from the grammar specification
         let generator = Generator::new(gramspec);
-        generator.generate("./src/parser.rs", "GramspecParser", "    ").unwrap();
+        generator
+            .generate("./src/parser.rs", "GramspecParser", "    ")
+            .unwrap();
     } else {
-        GramspecParser::new()
+        let result = GramspecParser::new()
             // .enable_debug()
-            .parse_file("test_files/gramspec.grm")
-            .unwrap()
-            .unwrap()
-            .pretty_print();
+            .parse_file("temp/gramspec.grm");
+
+        match result {
+            Ok(result) => result.pretty_print(),
+            Err(err) => {
+                eprintln!("Error parsing grammar specification: {}", err);
+                std::process::exit(1);
+            }
+        }
     }
 }

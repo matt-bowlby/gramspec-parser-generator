@@ -1,13 +1,52 @@
-use std::error::Error;
-use std::collections::HashMap;
 use regex::Regex;
+use std::collections::HashMap;
+use std::error::Error;
 
 use expression::Expression::{self, *};
 use node::{Node, NodeType::*};
 
-const KEYWORDS: &[(&str, &str)] = &[
-_TS_("ENDMARKER", "0"),
-];
+use crate::parser::ParseResult::Fail;
+use crate::parser::ParseResult::Success;
+
+const KEYWORDS: &[(&str, &str)] = &[("ENDMARKER", "0")];
+
+#[derive(Clone, Debug)]
+enum ParseResult {
+_TS_Success(Vec<Node>),
+_TS_Fail(std::string::String, std::string::String, usize),
+}
+
+impl ParseResult {
+_TS_pub fn default_fail() -> Self {
+_TS__TS_Fail("".to_string(), "".to_string(), usize::MAX)
+_TS_}
+
+_TS_pub fn is_fail(&self) -> bool {
+_TS__TS_matches!(self, Fail(_, _, _))
+_TS_}
+
+_TS_pub fn is_success(&self) -> bool {
+_TS__TS_matches!(self, Success(_))
+_TS_}
+
+_TS_pub fn merge_fail(self, other: ParseResult) -> ParseResult {
+_TS__TS_match (self, other) {
+_TS__TS__TS_(Fail(m1, e1, p1), Fail(m2, e2, p2)) => {
+_TS__TS__TS__TS_if p1 == usize::MAX {
+_TS__TS__TS__TS__TS_Fail(m2, e2, p2)
+_TS__TS__TS__TS_} else if p2 == usize::MAX {
+_TS__TS__TS__TS__TS_Fail(m1, e1, p1)
+_TS__TS__TS__TS_} else if p1 >= p2 {
+_TS__TS__TS__TS__TS_Fail(m1, e1, p1)
+_TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS_Fail(m2, e2, p2)
+_TS__TS__TS__TS_}
+_TS__TS__TS_}
+_TS__TS__TS_(s @ Success(_), _) => s,
+_TS__TS__TS_(_, s @ Success(_)) => s,
+_TS__TS_}
+_TS_}
+}
 
 #[allow(dead_code)]
 pub struct _PARSERNAME_ {
@@ -16,13 +55,19 @@ _TS_pub debug: bool,
 
 _TS_debug_indent_level: usize,
 _TS_content: std::string::String,
-_TS_memos: HashMap<usize, HashMap<std::string::String, Box<Option<Vec<Node>>>>>,
+_TS_memos: HashMap<usize, HashMap<std::string::String, ParseResult>>,
 }
 
 #[allow(dead_code)]
 impl _PARSERNAME_ {
 _TS_pub fn new() -> Self {
-_TS__TS__PARSERNAME_ { content: std::string::String::new(), position: 0, memos: HashMap::new(), debug: false, debug_indent_level: 0 }
+_TS__TS__PARSERNAME_ {
+_TS__TS__TS_content: std::string::String::new(),
+_TS__TS__TS_position: 0,
+_TS__TS__TS_memos: HashMap::new(),
+_TS__TS__TS_debug: false,
+_TS__TS__TS_debug_indent_level: 0,
+_TS__TS_}
 _TS_}
 
 _TS_pub fn enable_debug(mut self) -> Self {
@@ -32,11 +77,16 @@ _TS_}
 
 _TS_fn debug_log(&self, message: &str) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("{}DEBUG: \x1b[34m{}\x1b[0m | Position: {} | Next chars: {:?}",
+_TS__TS__TS_println!(
+_TS__TS__TS__TS_"{}DEBUG: \x1b[34m{}\x1b[0m | Position: {} | Next chars: {:?}",
 _TS__TS__TS__TS_"_TS_".repeat(self.debug_indent_level),
 _TS__TS__TS__TS_message,
 _TS__TS__TS__TS_self.position,
-_TS__TS__TS__TS_self.content.chars().skip(self.position).take(20).collect::<std::string::String>()
+_TS__TS__TS__TS_self.content
+_TS__TS__TS__TS__TS_.chars()
+_TS__TS__TS__TS__TS_.skip(self.position)
+_TS__TS__TS__TS__TS_.take(20)
+_TS__TS__TS__TS__TS_.collect::<std::string::String>()
 _TS__TS__TS_);
 _TS__TS__TS_let mut input = std::string::String::new();
 _TS__TS__TS_std::io::stdin().read_line(&mut input).unwrap();
@@ -45,33 +95,67 @@ _TS_}
 
 _TS_fn pass(&self) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("{}\x1b[32mPASS\x1b[0m\n", "    ".repeat(self.debug_indent_level));
+_TS__TS__TS_println!(
+_TS__TS__TS__TS_"{}\x1b[32mPASS\x1b[0m\n",
+_TS__TS__TS__TS_"_TS_".repeat(self.debug_indent_level)
+_TS__TS__TS_);
 _TS__TS_}
 _TS_}
 
 _TS_fn fail(&self) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("{}\x1b[31mFAIL\x1b[0m\n", "    ".repeat(self.debug_indent_level));
+_TS__TS__TS_println!(
+_TS__TS__TS__TS_"{}\x1b[31mFAIL\x1b[0m\n",
+_TS__TS__TS__TS_"_TS_".repeat(self.debug_indent_level)
+_TS__TS__TS_);
 _TS__TS_}
 _TS_}
 
-_TS_pub fn parse(&mut self, input: std::string::String) -> Result<Option<Node>, Box<dyn Error>> {
+_TS_fn get_line_col(&self, pos: usize) -> (usize, usize) {
+_TS__TS_let mut line = 1;
+_TS__TS_let mut col = 1;
+_TS__TS_for (i, c) in self.content.chars().enumerate() {
+_TS__TS__TS_if i == pos {
+_TS__TS__TS__TS_break;
+_TS__TS__TS_}
+_TS__TS__TS_if c == '\n' {
+_TS__TS__TS__TS_line += 1;
+_TS__TS__TS__TS_col = 1;
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_col += 1;
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_(line, col)
+_TS_}
+
+_TS_pub fn parse(&mut self, input: std::string::String) -> Result<Node, Box<dyn Error>> {
 _TS__TS_self.position = 0;
 _TS__TS_self.content = input;
-_TS__TS_if let Some(nodes) = self.__ENTRYRULE_()? {
-_TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
-_TS__TS__TS_return Ok(Some(nodes[0].clone()));
+
+_TS__TS_match self.__ENTRYRULE_()? {
+_TS__TS__TS_Success(nodes) => {
+_TS__TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
+_TS__TS__TS__TS_Ok(nodes[0].clone())
+_TS__TS__TS_}
+_TS__TS__TS_Fail(exp, fnd, pos) => {
+_TS__TS__TS__TS_let (line, col) = self.get_line_col(pos);
+_TS__TS__TS__TS_Err(format!(
+_TS__TS__TS__TS__TS_"Parse error: Expected '{}' but found '{}' at line: {}, col: {}",
+_TS__TS__TS__TS__TS_exp, fnd, line, col
+_TS__TS__TS__TS_)
+_TS__TS__TS__TS_.into())
+_TS__TS__TS_}
 _TS__TS_}
-_TS__TS_Ok(None)
 _TS_}
 
-_TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {
+_TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Node, Box<dyn Error>> {
 _TS__TS_let content = std::fs::read_to_string(file_path)?;
 _TS__TS_self.parse(content)
 _TS_}
 
 _TS_fn clear_discard_nodes(&self, nodes: Vec<Node>) -> Vec<Node> {
-_TS__TS_nodes.into_iter()
+_TS__TS_nodes
+_TS__TS__TS_.into_iter()
 _TS__TS__TS_.filter(|node| node.node_type != _Discard)
 _TS__TS__TS_.map(|mut node| {
 _TS__TS__TS__TS_node.children = self.clear_discard_nodes(node.children);
@@ -80,45 +164,47 @@ _TS__TS__TS_})
 _TS__TS__TS_.collect()
 _TS_}
 
-_TS_fn circular_wrapper(&mut self, rule_name: std::string::String) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn circular_wrapper(
+_TS__TS_&mut self,
+_TS__TS_rule_name: std::string::String,
+_TS_) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_let pos = self.position;
 
-_TS__TS_if let Some(cached_result_box) = self.memos.get(&pos).and_then(|memo| memo.get(&rule_name)) {
-_TS__TS__TS_let cached_result = *cached_result_box.clone();
-
-_TS__TS__TS_let end_pos = cached_result.as_ref()
-_TS__TS__TS__TS_.and_then(|nodes| nodes.iter().map(|n| n.get_end_pos()).max())
-_TS__TS__TS__TS_.unwrap_or(pos);
-_TS__TS__TS_self.position = end_pos;
-
-_TS__TS__TS_return Ok(cached_result);
+_TS__TS_if let Some(parse_result) = self.memos.get(&pos).and_then(|memo| memo.get(&rule_name)) {
+_TS__TS__TS_if let Success(nodes) = parse_result {
+_TS__TS__TS__TS_let end_pos = nodes.iter().map(|n| n.get_end_pos()).max().unwrap_or(pos);
+_TS__TS__TS__TS_self.position = end_pos;
+_TS__TS__TS_}
+_TS__TS__TS_return Ok(parse_result.clone());
 _TS__TS_}
 
-_TS__TS_self.memos.entry(pos).or_insert_with(HashMap::new).insert(rule_name.clone(), Box::new(None));
+_TS__TS_self.memos
+_TS__TS__TS_.entry(pos)
+_TS__TS__TS_.or_insert_with(HashMap::new)
+_TS__TS__TS_.insert(rule_name.clone(), ParseResult::default_fail());
 
-_TS__TS_let mut last_result = None;
+_TS__TS_let mut last_result;
 _TS__TS_let mut last_pos = pos;
 
 _TS__TS_loop {
 _TS__TS__TS_self.position = pos;
 
-_TS__TS__TS_let result = self.call_rule(&rule_name, false)?;
+_TS__TS__TS_last_result = self.call_rule(&rule_name, false)?;
 _TS__TS__TS_let end_pos = self.position;
 
 _TS__TS__TS_if end_pos <= last_pos {
 _TS__TS__TS__TS_break;
 _TS__TS__TS_}
 
-_TS__TS__TS_last_result = result;
 _TS__TS__TS_last_pos = end_pos;
 
 _TS__TS__TS_if let Some(memo) = self.memos.get_mut(&pos) {
-_TS__TS__TS__TS_memo.insert(rule_name.clone(), Box::new(last_result.clone()));
+_TS__TS__TS__TS_memo.insert(rule_name.clone(), last_result.clone());
 _TS__TS__TS_}
 _TS__TS_}
 
 _TS__TS_// If the result was a failure, remove it from the cache to prevent poisoning
-_TS__TS_if last_result.is_none() {
+_TS__TS_if last_result.is_fail() {
 _TS__TS__TS_if let Some(memo) = self.memos.get_mut(&pos) {
 _TS__TS__TS__TS_memo.remove(&rule_name);
 _TS__TS__TS_}
@@ -128,41 +214,19 @@ _TS__TS_self.position = last_pos;
 _TS__TS_Ok(last_result)
 _TS_}
 
-_TS_fn expect_string(&mut self, string: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn expect_string(&mut self, string: &str) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_self.debug_log(&format!("Expect string: '{}'", string));
 _TS__TS_let mut start_pos = self.position;
 _TS__TS_loop {
 _TS__TS__TS_if self.content[self.position..].starts_with(string) {
 _TS__TS__TS__TS_self.position += string.len();
 _TS__TS__TS__TS_self.pass();
-_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(string.to_string()), start_pos, self.position)]));
-_TS__TS__TS_} else {
-_TS__TS__TS__TS_self.__ignore_between()?;
-_TS__TS__TS__TS_if start_pos == self.position {
-_TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_start_pos = self.position;
-_TS__TS__TS_}
-_TS__TS_}
-_TS__TS_self.position = start_pos;
-_TS__TS_self.fail();
-_TS__TS_Ok(None)
-_TS_}
-
-_TS_fn expect_regex(&mut self, regex: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
-_TS__TS_self.debug_log(&format!("Expect regex: '{}'", regex));
-_TS__TS_let mut start_pos = self.position;
-_TS__TS_loop {
-_TS__TS__TS_if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
-_TS__TS__TS__TS_self.position += captures.get(0).unwrap().end();
-_TS__TS__TS__TS_self.pass();
-_TS__TS__TS__TS_return Ok(Some(vec![Node::new_with_position(
+_TS__TS__TS__TS_return Ok(Success(vec![Node::new_with_position(
 _TS__TS__TS__TS__TS__String,
 _TS__TS__TS__TS__TS_vec![],
-_TS__TS__TS__TS__TS_Some(captures.get(0).unwrap().as_str().to_string()),
+_TS__TS__TS__TS__TS_Some(string.to_string()),
 _TS__TS__TS__TS__TS_start_pos,
-_TS__TS__TS__TS__TS_self.position
+_TS__TS__TS__TS__TS_self.position,
 _TS__TS__TS__TS_)]));
 _TS__TS__TS_} else {
 _TS__TS__TS__TS_self.__ignore_between()?;
@@ -175,245 +239,336 @@ _TS__TS__TS_}
 _TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_self.fail();
-_TS__TS_Ok(None)
+_TS__TS_Ok(Fail(
+_TS__TS__TS_string.to_string(),
+_TS__TS__TS_self.content
+_TS__TS__TS__TS_.get(self.position..self.position + string.len())
+_TS__TS__TS__TS_.unwrap_or(&self.content[self.position..])
+_TS__TS__TS__TS_.to_string(),
+_TS__TS__TS_start_pos,
+_TS__TS_))
+_TS_}
+
+_TS_fn expect_regex(&mut self, regex: &str) -> Result<ParseResult, Box<dyn Error>> {
+_TS__TS_self.debug_log(&format!("Expect regex: '{}'", regex));
+_TS__TS_let mut start_pos = self.position;
+_TS__TS_loop {
+_TS__TS__TS_if let Some(captures) = Regex::new(regex)
+_TS__TS__TS__TS_.unwrap()
+_TS__TS__TS__TS_.captures(&self.content[self.position..])
+_TS__TS__TS_{
+_TS__TS__TS__TS_self.position += captures.get(0).unwrap().end();
+_TS__TS__TS__TS_self.pass();
+_TS__TS__TS__TS_return Ok(Success(vec![Node::new_with_position(
+_TS__TS__TS__TS__TS__String,
+_TS__TS__TS__TS__TS_vec![],
+_TS__TS__TS__TS__TS_Some(captures.get(0).unwrap().as_str().to_string()),
+_TS__TS__TS__TS__TS_start_pos,
+_TS__TS__TS__TS__TS_self.position,
+_TS__TS__TS__TS_)]));
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_self.__ignore_between()?;
+_TS__TS__TS__TS_if start_pos == self.position {
+_TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS_}
+
+_TS__TS__TS__TS_start_pos = self.position;
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_self.position = start_pos;
+_TS__TS_self.fail();
+_TS__TS_Ok(Fail(
+_TS__TS__TS_regex.to_string(),
+_TS__TS__TS_self.content
+_TS__TS__TS__TS_.get(self.position..self.position + 1)
+_TS__TS__TS__TS_.unwrap_or(&self.content[self.position..])
+_TS__TS__TS__TS_.to_string(),
+_TS__TS__TS_start_pos,
+_TS__TS_))
 _TS_}
 
 _TS_fn get_keywords_map(&self) -> HashMap<std::string::String, std::string::String> {
-_TS__TS_KEYWORDS.iter()
+_TS__TS_KEYWORDS
+_TS__TS__TS_.iter()
 _TS__TS__TS_.map(|(k, v)| (k.to_string(), v.to_string()))
 _TS__TS__TS_.collect()
 _TS_}
 
-_TS_fn expect_keyword(&mut self, keyword: &str) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn expect_keyword(&mut self, keyword: &str) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_let start_pos = self.position;
-_TS__TS_let keyword_value = self.get_keywords_map().get(keyword)
+_TS__TS_let keyword_value = self
+_TS__TS__TS_.get_keywords_map()
+_TS__TS__TS_.get(keyword)
 _TS__TS__TS_.ok_or_else(|| format!("Unknown keyword: {}", keyword))?
 _TS__TS__TS_.to_owned();
 _TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
 _TS__TS__TS_self.position += keyword_value.len();
 _TS__TS__TS_self.pass();
-_TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos, self.position)]));
+_TS__TS__TS_return Ok(Success(vec![Node::new_with_position(
+_TS__TS__TS__TS__String,
+_TS__TS__TS__TS_vec![],
+_TS__TS__TS__TS_Some(keyword.to_string()),
+_TS__TS__TS__TS_start_pos,
+_TS__TS__TS__TS_self.position,
+_TS__TS__TS_)]));
 _TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_self.fail();
-_TS__TS_Ok(None)
+_TS__TS_Ok(Fail(
+_TS__TS__TS_keyword.to_string(),
+_TS__TS__TS_self.content
+_TS__TS__TS__TS_.get(self.position..self.position + keyword_value.len())
+_TS__TS__TS__TS_.unwrap_or(&self.content[self.position..])
+_TS__TS__TS__TS_.to_string(),
+_TS__TS__TS_start_pos,
+_TS__TS_))
 _TS_}
 
-_TS_fn eval(&mut self, expression: &Expression) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn eval(&mut self, expression: &Expression) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_match expression {
 _TS__TS__TS_Expression::Rule(rule) => {
-_TS__TS__TS__TS_if let Some(nodes) = self.call_rule(rule, true)? {
-_TS__TS__TS__TS__TS_self.debug_indent_level -= 1;
-_TS__TS__TS__TS__TS_Ok(Some(nodes))
-_TS__TS__TS__TS_} else {
-_TS__TS__TS__TS__TS_self.debug_indent_level -= 1;
-_TS__TS__TS__TS__TS_Ok(None)
-_TS__TS__TS__TS_}
-_TS__TS__TS_},
+_TS__TS__TS__TS_let parse_result = self.call_rule(rule, true)?;
+_TS__TS__TS__TS_self.debug_indent_level -= 1;
+_TS__TS__TS__TS_Ok(parse_result)
+_TS__TS__TS_}
 _TS__TS__TS_Expression::RegexLiteral(regex) => self.expect_regex(regex),
 _TS__TS__TS_Expression::StringLiteral(string) => self.expect_string(string),
 _TS__TS__TS_Expression::Keyword(keyword) => self.expect_keyword(keyword),
 _TS__TS__TS_Expression::Or(left, right) => {
+_TS__TS__TS__TS_// Evaluate left expression from starting point
 _TS__TS__TS__TS_let start_pos = self.position;
-_TS__TS__TS__TS_let left_nodes = self.eval(&*left)?;
+_TS__TS__TS__TS_let left_result = self.eval(&*left)?;
+_TS__TS__TS__TS_// Record position and reset
 _TS__TS__TS__TS_let left_end = self.position;
 _TS__TS__TS__TS_self.position = start_pos;
-_TS__TS__TS__TS_let right_nodes = self.eval(&*right)?;
+_TS__TS__TS__TS_// Evaluate right expression from starting point
+_TS__TS__TS__TS_let right_result = self.eval(&*right)?;
+_TS__TS__TS__TS_// Record position and reset
 _TS__TS__TS__TS_let right_end = self.position;
+_TS__TS__TS__TS_self.position = start_pos;
 
-_TS__TS__TS__TS_if left_end > right_end {
-_TS__TS__TS__TS__TS_self.position = left_end;
-_TS__TS__TS__TS__TS_return Ok(left_nodes);
-_TS__TS__TS__TS_} else if right_end > left_end {
-_TS__TS__TS__TS__TS_self.position = right_end;
-_TS__TS__TS__TS__TS_return Ok(right_nodes);
-_TS__TS__TS__TS_} else {
-_TS__TS__TS__TS__TS_self.position = start_pos;
-_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS__TS_match (left_result, right_result) {
+_TS__TS__TS__TS__TS_// If both result are successful, choose the one that has the longer match
+_TS__TS__TS__TS__TS_(left_result @ Success(_), right_result @ Success(_)) => {
+_TS__TS__TS__TS__TS__TS_if left_end >= right_end {
+_TS__TS__TS__TS__TS__TS__TS_self.position = left_end;
+_TS__TS__TS__TS__TS__TS__TS_Ok(left_result)
+_TS__TS__TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS__TS__TS_self.position = right_end;
+_TS__TS__TS__TS__TS__TS__TS_Ok(right_result)
+_TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If left successful, return it
+_TS__TS__TS__TS__TS_(left_result @ Success(_), _) => {
+_TS__TS__TS__TS__TS__TS_self.position = left_end;
+_TS__TS__TS__TS__TS__TS_Ok(left_result)
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If right successful, return it
+_TS__TS__TS__TS__TS_(_, right_result @ Success(_)) => {
+_TS__TS__TS__TS__TS__TS_self.position = right_end;
+_TS__TS__TS__TS__TS__TS_Ok(right_result)
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If both are failures, return the failure that got the farthest as it is the "most specific" one. (This is done implicitly by merge_fail())
+_TS__TS__TS__TS__TS_(left_result @ Fail(_, _, _), right_result @ Fail(_, _, _)) => {
+_TS__TS__TS__TS__TS__TS_Ok(left_result.merge_fail(right_result))
+_TS__TS__TS__TS__TS_}
 _TS__TS__TS__TS_}
-_TS__TS__TS_},
+_TS__TS__TS_}
 _TS__TS__TS_Expression::And(left, right) => {
-_TS__TS__TS__TS_let left_nodes = self.eval(&*left)?;
-_TS__TS__TS__TS_if left_nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(None);
-_TS__TS__TS__TS_}
-_TS__TS__TS__TS_let right_nodes = self.eval(&*right)?;
-_TS__TS__TS__TS_if right_nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(None);
-_TS__TS__TS__TS_}
-_TS__TS__TS__TS_let mut final_nodes = left_nodes.unwrap();
-_TS__TS__TS__TS_final_nodes.extend(right_nodes.unwrap());
-_TS__TS__TS__TS_Ok(Some(final_nodes))
-_TS__TS__TS_},
-_TS__TS__TS_Expression::DelimitRepeatOne(expression, delimiter) => {
-_TS__TS__TS__TS_// Attempt to parse the first expression
-_TS__TS__TS__TS_let nodes = self.eval(&*expression)?;
-_TS__TS__TS__TS_// If the first expression fails, return an empty vector
-_TS__TS__TS__TS_if nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(None);
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_let mut nodes = nodes.unwrap();
-
-_TS__TS__TS__TS_// Attempt to parse subsequent expressions with delimiters
-_TS__TS__TS__TS_loop {
-_TS__TS__TS__TS__TS_let start = self.position;
-_TS__TS__TS__TS__TS_// Attempt to parse the delimiter
-_TS__TS__TS__TS__TS_let delimiter_nodes = self.eval(&*delimiter)?;
-_TS__TS__TS__TS__TS_// If it fails, break the loop
-_TS__TS__TS__TS__TS_if delimiter_nodes.is_none() {
-_TS__TS__TS__TS__TS__TS_self.position = start; // Technically unnecessary as a failure would leave position unchanged, but just to be consistent
-_TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS_let start = self.position;
+_TS__TS__TS__TS_// Eval left expression first
+_TS__TS__TS__TS_match self.eval(&*left)? {
+_TS__TS__TS__TS__TS_// If left result is successful, evaluate right
+_TS__TS__TS__TS__TS_Success(mut left_nodes) => {
+_TS__TS__TS__TS__TS__TS_match self.eval(&*right)? {
+_TS__TS__TS__TS__TS__TS__TS_// If right result is successful, combine both and return
+_TS__TS__TS__TS__TS__TS__TS_Success(right_nodes) => {
+_TS__TS__TS__TS__TS__TS__TS__TS_left_nodes.extend(right_nodes);
+_TS__TS__TS__TS__TS__TS__TS__TS_Ok(Success(left_nodes))
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_// If right result fails, return right failure
+_TS__TS__TS__TS__TS__TS__TS_f => {
+_TS__TS__TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS__TS__TS_Ok(f)
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS_}
 _TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_// Attempt to parse the next expression
-_TS__TS__TS__TS__TS_let expression_nodes = self.eval(&*expression)?;
-_TS__TS__TS__TS__TS_// If the next expression fails, break the loop
-_TS__TS__TS__TS__TS_if expression_nodes.is_none() {
-_TS__TS__TS__TS__TS__TS_self.position = start;
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-
-_TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
-_TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
-_TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
-
-_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
-_TS__TS__TS__TS__TS_if self.position <= start {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If left result fails, return left failure
+_TS__TS__TS__TS__TS_f => Ok(f),
 _TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_// Return the nodes collected so far
-_TS__TS__TS__TS_Ok(Some(nodes))
-_TS__TS__TS_},
-_TS__TS__TS_Expression::DelimitRepeatZero(left, right) => {
-_TS__TS__TS__TS_// Attempt to parse the first expression
-_TS__TS__TS__TS_let nodes = self.eval(&*left)?;
-_TS__TS__TS__TS_// If the first expression fails, return an empty vector
-_TS__TS__TS__TS_if nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(Some(vec![]));
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_let mut nodes = nodes.unwrap();
-
-_TS__TS__TS__TS_// Attempt to parse subsequent expressions with delimiters
-_TS__TS__TS__TS_loop {
-_TS__TS__TS__TS__TS_let start = self.position;
-_TS__TS__TS__TS__TS_// Attempt to parse the delimiter
-_TS__TS__TS__TS__TS_let delimiter_nodes = self.eval(&*right)?;
-_TS__TS__TS__TS__TS_// If it fails, break the loop
-_TS__TS__TS__TS__TS_if delimiter_nodes.is_none() {
-_TS__TS__TS__TS__TS__TS_self.position = start; // Technically unnecessary as a failure would leave position unchanged, but just to be consistent
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_// Attempt to parse the next expression
-_TS__TS__TS__TS__TS_let expression_nodes = self.eval(&*left)?;
-_TS__TS__TS__TS__TS_// If the next expression fails, break the loop
-_TS__TS__TS__TS__TS_if expression_nodes.is_none() {
-_TS__TS__TS__TS__TS__TS_self.position = start;
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-
-_TS__TS__TS__TS__TS_// Only if both delimiter and expression are successful, append them to the nodes
-_TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes.unwrap());
-_TS__TS__TS__TS__TS_nodes.extend(expression_nodes.unwrap());
-
-_TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has advanced
-_TS__TS__TS__TS__TS_if self.position <= start {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_// Return the nodes collected so far
-_TS__TS__TS__TS_Ok(Some(nodes))
-_TS__TS__TS_},
-_TS__TS__TS_Expression::RepeatOne(expr) => {
-_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
-_TS__TS__TS__TS_if nodes.is_none() { return Ok(None); }
-
-_TS__TS__TS__TS_let mut last_pos = self.position;
-_TS__TS__TS__TS_while let Some(new_nodes) = self.eval(&*expr)? {
-_TS__TS__TS__TS__TS_nodes.as_mut().unwrap().extend(new_nodes);
-_TS__TS__TS__TS__TS_if self.position == last_pos {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_last_pos = self.position;
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_Ok(nodes)
-_TS__TS__TS_},
-_TS__TS__TS_Expression::RepeatZero(expr) => {
-_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
-_TS__TS__TS__TS_if nodes.is_none() { return Ok(Some(vec![])); }
-
-_TS__TS__TS__TS_let mut last_pos = self.position;
-_TS__TS__TS__TS_while let Some(new_nodes) = self.eval(&*expr)? {
-_TS__TS__TS__TS__TS_nodes.as_mut().unwrap().extend(new_nodes);
-_TS__TS__TS__TS__TS_if self.position == last_pos {
-_TS__TS__TS__TS__TS__TS_break;
-_TS__TS__TS__TS__TS_}
-_TS__TS__TS__TS__TS_last_pos = self.position;
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_Ok(nodes)
-_TS__TS__TS_},
-_TS__TS__TS_Expression::Optional(expr) => {
-_TS__TS__TS__TS_let mut nodes = self.eval(&*expr)?;
-
-_TS__TS__TS__TS_if nodes.is_none() {
-_TS__TS__TS__TS__TS_nodes = Some(vec![]);
-_TS__TS__TS__TS_}
-
-_TS__TS__TS__TS_Ok(nodes)
-_TS__TS__TS_},
-_TS__TS__TS_Expression::Discard(expr) => {
-_TS__TS__TS__TS_let nodes = self.eval(&*expr)?;
-_TS__TS__TS__TS_if nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(None);
-_TS__TS__TS__TS_}
-_TS__TS__TS__TS_let nodes = nodes.unwrap();
-_TS__TS__TS__TS_if nodes.len() == 0 {
-_TS__TS__TS__TS__TS_return Ok(Some(vec![]));
-_TS__TS__TS__TS_}
-_TS__TS__TS__TS_let last_node  = nodes[nodes.len() - 1].clone();
-_TS__TS__TS__TS_let node = Node::new_with_position(_Discard, vec![], None, self.position, last_node.get_end_pos());
-_TS__TS__TS__TS_Ok(Some(vec![node]))
 _TS__TS__TS_}
-_TS__TS__TS_Expression::Meta(expr) => {
-_TS__TS__TS__TS_let nodes = self.eval(&*expr)?;
-_TS__TS__TS__TS_if nodes.is_none() {
-_TS__TS__TS__TS__TS_return Ok(None);
+_TS__TS__TS_Expression::DelimitRepeatOne(expr, delimiter)
+_TS__TS__TS_| Expression::DelimitRepeatZero(expr, delimiter) => {
+_TS__TS__TS__TS_let mut necessary_initial_parse = true;
+_TS__TS__TS__TS_if let Expression::DelimitRepeatZero(_, _) = expression {
+_TS__TS__TS__TS__TS_necessary_initial_parse = false;
 _TS__TS__TS__TS_}
-_TS__TS__TS__TS_// Assume that the length of nodes is 1 for Meta, and is a Rule Node
-_TS__TS__TS__TS_let nodes = nodes.unwrap()[0].children.clone();
-_TS__TS__TS__TS_Ok(Some(nodes))
+_TS__TS__TS__TS_// Attempt to parse the first expression
+_TS__TS__TS__TS_match self.eval(&*expr)? {
+_TS__TS__TS__TS__TS_// If successful, continue attempting to parse (delimiter, expression) pairs
+_TS__TS__TS__TS__TS_Success(mut nodes) => {
+_TS__TS__TS__TS__TS__TS_// Repeatedly parse (delimiter, expression) pairs
+_TS__TS__TS__TS__TS__TS_loop {
+_TS__TS__TS__TS__TS__TS__TS_// Record start position for progress check later
+_TS__TS__TS__TS__TS__TS__TS_let start = self.position;
+_TS__TS__TS__TS__TS__TS__TS_// Attempt to parse delimiter
+_TS__TS__TS__TS__TS__TS__TS_match self.eval(&*delimiter)? {
+_TS__TS__TS__TS__TS__TS__TS__TS_// If successful, attempt to parse expression
+_TS__TS__TS__TS__TS__TS__TS__TS_Success(delimiter_nodes) => match self.eval(&*expr)? {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_// If both are successful, append them to the successfully parse nodes
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_Success(expression_nodes) => {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS__TS_nodes.extend(delimiter_nodes);
+_TS__TS__TS__TS__TS__TS__TS__TS__TS__TS_nodes.extend(expression_nodes);
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_// If expression parse failed, break loop. No need to return the failure as it's an optional parse
+_TS__TS__TS__TS__TS__TS__TS__TS__TS__ => {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS__TS_},
+_TS__TS__TS__TS__TS__TS__TS__TS_// If delimiter parse failed, break loop. No need to return the failure as it's an optional parse
+_TS__TS__TS__TS__TS__TS__TS__TS__ => {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has progressed
+_TS__TS__TS__TS__TS__TS__TS_if self.position <= start {
+_TS__TS__TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS_}
+
+_TS__TS__TS__TS__TS__TS_// Return nodes
+_TS__TS__TS__TS__TS__TS_Ok(Success(nodes))
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If first expression parse failed, bubble error up
+_TS__TS__TS__TS__TS_f => {
+_TS__TS__TS__TS__TS__TS_if necessary_initial_parse {
+_TS__TS__TS__TS__TS__TS__TS_Ok(f)
+_TS__TS__TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS__TS__TS_Ok(Success(vec![]))
+_TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS_}
 _TS__TS__TS_}
+_TS__TS__TS_Expression::RepeatOne(expr) | Expression::RepeatZero(expr) => {
+_TS__TS__TS__TS_let mut necessary_initial_parse = true;
+_TS__TS__TS__TS_if let Expression::RepeatZero(_) = expression {
+_TS__TS__TS__TS__TS_necessary_initial_parse = false;
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_// Attempt to parse initial expression
+_TS__TS__TS__TS_match self.eval(&*expr)? {
+_TS__TS__TS__TS__TS_// If successful, continue to attempt to parse further instances of expr
+_TS__TS__TS__TS__TS_Success(mut nodes) => {
+_TS__TS__TS__TS__TS__TS_// Record start position for progress checking later
+_TS__TS__TS__TS__TS__TS_let mut start = self.position;
+
+_TS__TS__TS__TS__TS__TS_// Repeatedly parse further instances of expr
+_TS__TS__TS__TS__TS__TS_loop {
+_TS__TS__TS__TS__TS__TS__TS_// Attmpt to parse expr
+_TS__TS__TS__TS__TS__TS__TS_match self.eval(&*expr)? {
+_TS__TS__TS__TS__TS__TS__TS__TS_// If successful, append parsed nodes to final nodes
+_TS__TS__TS__TS__TS__TS__TS__TS_Success(rest) => {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_nodes.extend(rest);
+_TS__TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS__TS_// If parse failed, break loop. No need to return the failure as it's an optional parse
+_TS__TS__TS__TS__TS__TS__TS__TS__ => {
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_self.position = start;
+_TS__TS__TS__TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_// Prevent infinite loops by checking if position has progressed
+_TS__TS__TS__TS__TS__TS__TS_if self.position == start {
+_TS__TS__TS__TS__TS__TS__TS__TS_break;
+_TS__TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS__TS_// Update start position
+_TS__TS__TS__TS__TS__TS__TS_start = self.position;
+_TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS_Ok(Success(nodes))
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_// If initial expression failed, bubble error up
+_TS__TS__TS__TS__TS_f => {
+_TS__TS__TS__TS__TS__TS_if necessary_initial_parse {
+_TS__TS__TS__TS__TS__TS__TS_Ok(f)
+_TS__TS__TS__TS__TS__TS_} else {
+_TS__TS__TS__TS__TS__TS__TS_Ok(Success(vec![]))
+_TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS_}
+_TS__TS__TS_}
+_TS__TS__TS_Expression::Optional(expr) => match self.eval(&*expr)? {
+_TS__TS__TS__TS_Success(nodes) => Ok(Success(nodes)),
+_TS__TS__TS__TS__ => Ok(Success(vec![])),
+_TS__TS__TS_},
+_TS__TS__TS_Expression::Discard(expr) => match self.eval(&*expr)? {
+_TS__TS__TS__TS_Success(nodes) => {
+_TS__TS__TS__TS__TS_let start = self.position;
+_TS__TS__TS__TS__TS_if nodes.len() == 0 {
+_TS__TS__TS__TS__TS__TS_return Ok(Success(vec![]));
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS_let last_node = nodes[nodes.len() - 1].clone();
+_TS__TS__TS__TS__TS_let node = Node::new_with_position(
+_TS__TS__TS__TS__TS__TS__Discard,
+_TS__TS__TS__TS__TS__TS_vec![],
+_TS__TS__TS__TS__TS__TS_None,
+_TS__TS__TS__TS__TS__TS_start,
+_TS__TS__TS__TS__TS__TS_last_node.get_end_pos(),
+_TS__TS__TS__TS__TS_);
+_TS__TS__TS__TS__TS_Ok(Success(vec![node]))
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_f => Ok(f),
+_TS__TS__TS_},
+_TS__TS__TS_Expression::Meta(expr) => match self.eval(&*expr)? {
+_TS__TS__TS__TS_Success(nodes) => Ok(Success(nodes[0].children.clone())),
+_TS__TS__TS__TS_f => Ok(f),
+_TS__TS__TS_},
 _TS__TS_}
 _TS_}
 
-_TS_fn get_longest_expression_match(&mut self, expressions: &[Expression]) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn get_longest_expression_match(
+_TS__TS_&mut self,
+_TS__TS_expressions: &[Expression],
+_TS_) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_let start_pos = self.position;
 _TS__TS_let mut longest_end = start_pos;
-_TS__TS_let mut longest_nodes = None;
+_TS__TS_let mut longest_result = ParseResult::default_fail();
 
 _TS__TS_for expr in expressions.iter() {
-_TS__TS__TS_let result = self.eval(&expr)?;
-_TS__TS__TS_let new_end_pos = self.position;
-_TS__TS__TS_self.position = start_pos; // Reset position to start for each expression evaluation
-_TS__TS__TS_if new_end_pos > longest_end || longest_nodes.is_none() {
-_TS__TS__TS__TS_longest_end = new_end_pos;
-_TS__TS__TS__TS_longest_nodes = result;
+_TS__TS__TS_// Attempt to parse expression
+_TS__TS__TS_match self.eval(&expr)? {
+_TS__TS__TS__TS_s @ Success(_) => {
+_TS__TS__TS__TS__TS_// If the new successful result got farther than the longest running one, it is the better match
+_TS__TS__TS__TS__TS_if self.position > longest_end {
+_TS__TS__TS__TS__TS__TS_longest_end = self.position;
+_TS__TS__TS__TS__TS__TS_longest_result = s;
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_curr_fail => {
+_TS__TS__TS__TS__TS_// Compare current fail to longest result
+_TS__TS__TS__TS__TS_match longest_result {
+_TS__TS__TS__TS__TS__TS_// If longest result is also a failure choose the one that got farther (done implicitly by merge_fail())
+_TS__TS__TS__TS__TS__TS_long_fail @ Fail(_, _, _) => {
+_TS__TS__TS__TS__TS__TS__TS_longest_result = curr_fail.merge_fail(long_fail);
+_TS__TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS__TS__TS_// If the longest result is a success, don't overwrite it with a fail
+_TS__TS__TS__TS__TS__TS__ => ()
+_TS__TS__TS__TS__TS_}
+_TS__TS__TS__TS_}
 _TS__TS__TS_}
+_TS__TS__TS_self.position = start_pos;
 _TS__TS_}
-_TS__TS_if longest_nodes.is_none() {
-_TS__TS__TS_self.position = start_pos; // Reset position if no matches found
-_TS__TS_} else {
-_TS__TS__TS_self.position = longest_end; // Update position to the end of the longest match
+_TS__TS_// If successful, update the position to the end of the longest successful match
+_TS__TS_if longest_result.is_success() {
+_TS__TS__TS_self.position = longest_end;
 _TS__TS_}
-_TS__TS_Ok(longest_nodes)
+_TS__TS_Ok(longest_result)
 _TS_}
 
-_TS_fn call_rule(&mut self, rule_name: &str, _protected: bool) -> Result<Option<Vec<Node>>, Box<dyn Error>> {
+_TS_fn call_rule(
+_TS__TS_&mut self,
+_TS__TS_rule_name: &str,
+_TS__TS__protected: bool,
+_TS_) -> Result<ParseResult, Box<dyn Error>> {
 _TS__TS_self.debug_log(&format!("Calling rule: {}", rule_name));
 _TS__TS_self.debug_indent_level += 1;
 _TS__TS_match rule_name {
@@ -431,7 +586,10 @@ _TS__TS_let start_pos = self.position;
 _TS__TS_let mut longest_end = self.position;
 _TS__TS_for regex in regexes.iter() {
 _TS__TS__TS_self.position = start_pos;
-_TS__TS__TS_if let Some(captures) = Regex::new(regex).unwrap().captures(&self.content[self.position..]) {
+_TS__TS__TS_if let Some(captures) = Regex::new(regex)
+_TS__TS__TS__TS_.unwrap()
+_TS__TS__TS__TS_.captures(&self.content[self.position..])
+_TS__TS__TS_{
 _TS__TS__TS__TS_let matched_str = captures.get(0).unwrap().as_str();
 _TS__TS__TS__TS_self.position += matched_str.len();
 _TS__TS__TS__TS_if self.position > longest_end {
@@ -482,8 +640,12 @@ _TS__TS__TS__TS_Expression::StringLiteral(string) => write!(f, "{}", string),
 _TS__TS__TS__TS_Expression::Keyword(keyword) => write!(f, "{}", keyword),
 _TS__TS__TS__TS_Expression::Or(left, right) => write!(f, "{:?} | {:?}", left, right),
 _TS__TS__TS__TS_Expression::And(left, right) => write!(f, "{:?} & {:?}", left, right),
-_TS__TS__TS__TS_Expression::DelimitRepeatOne(left, right) => write!(f, "({:?}),({:?})+", left, right),
-_TS__TS__TS__TS_Expression::DelimitRepeatZero(left, right) => write!(f, "({:?}),({:?})*", left, right),
+_TS__TS__TS__TS_Expression::DelimitRepeatOne(left, right) => {
+_TS__TS__TS__TS__TS_write!(f, "({:?}),({:?})+", left, right)
+_TS__TS__TS__TS_}
+_TS__TS__TS__TS_Expression::DelimitRepeatZero(left, right) => {
+_TS__TS__TS__TS__TS_write!(f, "({:?}),({:?})*", left, right)
+_TS__TS__TS__TS_}
 _TS__TS__TS__TS_Expression::Optional(expr) => write!(f, "({:?})?", expr),
 _TS__TS__TS__TS_Expression::RepeatOne(expr) => write!(f, "({:?})+", expr),
 _TS__TS__TS__TS_Expression::RepeatZero(expr) => write!(f, "({:?})*", expr),
