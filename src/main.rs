@@ -13,7 +13,7 @@ fn main() {
 
     if generate {
         // Read the grammar specification and code files
-        let gramspec = fs::read_to_string("test_files/gramspec.grm").unwrap();
+        let gramspec = fs::read_to_string("temp/gramspec.grm").unwrap();
         // let code = fs::read_to_string("test_files/test.txt").unwrap();
         // Tokenize the grammar specification
         let mut parser = Parser::new(gramspec);
@@ -26,11 +26,11 @@ fn main() {
         let generator = Generator::new(gramspec);
         generator.generate("./src/parser.rs", "GramspecParser", "    ").unwrap();
     } else {
-        GramspecParser::new()
+        match GramspecParser::new()
             // .enable_debug()
-            .parse_file("test_files/gramspec.grm")
-            .unwrap()
-            .unwrap()
-            .pretty_print();
+            .parse_file("temp/gramspec.grm") {
+                Ok(node) => node.pretty_print(),
+                Err(message)=> eprintln!("Error parsing file: {:?}", message),
+        }
     }
 }

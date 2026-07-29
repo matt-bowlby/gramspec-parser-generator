@@ -22,7 +22,7 @@ _TS_memos: HashMap<usize, HashMap<std::string::String, Box<Option<Vec<Node>>>>>,
 #[allow(dead_code)]
 impl _PARSERNAME_ {
 _TS_pub fn new() -> Self {
-_TS__TS__PARSERNAME_ { content: std::string::String::new(), position: 0, memos: HashMap::new(), debug: false, debug_indent_level: 0 }
+_TS__TS__PARSERNAME_ { content: std::string::String::new(), position: 0, memos: HashMap::new(), debug: false, debug_indent_level: 0, last_found: std::string::String::new(), last_position: 0 }
 _TS_}
 
 _TS_pub fn enable_debug(mut self) -> Self {
@@ -43,29 +43,55 @@ _TS__TS__TS_std::io::stdin().read_line(&mut input).unwrap();
 _TS__TS_}
 _TS_}
 
+_TS_fn get_line_col(&self, position: usize) -> (usize, usize) {
+_TS__TS_let mut line = 1;
+_TS__TS_let mut col = 1;
+_TS__TS_for (i, c) in self.content.chars().enumerate() {
+_TS__TS__TS_if i == position {
+_TS__TS__TS__TS_break;
+_TS__TS__TS_}
+_TS__TS__TS_if c == '\n' {
+_TS__TS__TS__TS_line += 1;
+_TS__TS__TS__TS_col = 1;
+_TS__TS__TS_} else {
+_TS__TS__TS__TS_col += 1;
+_TS__TS__TS_}
+_TS__TS_}
+_TS__TS_(line, col)
+_TS_}
+
 _TS_fn pass(&self) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("{}\x1b[32mPASS\x1b[0m\n", "    ".repeat(self.debug_indent_level));
+_TS__TS__TS_println!("{}\x1b[32mPASS\x1b[0m\n", "_TS_".repeat(self.debug_indent_level));
 _TS__TS_}
 _TS_}
 
 _TS_fn fail(&self) {
 _TS__TS_if self.debug {
-_TS__TS__TS_println!("{}\x1b[31mFAIL\x1b[0m\n", "    ".repeat(self.debug_indent_level));
+_TS__TS__TS_println!("{}\x1b[31mFAIL\x1b[0m\n", "_TS_".repeat(self.debug_indent_level));
 _TS__TS_}
 _TS_}
 
-_TS_pub fn parse(&mut self, input: std::string::String) -> Result<Option<Node>, Box<dyn Error>> {
+_TS_pub fn parse(&mut self, input: std::string::String) -> Result<Node, Box<dyn Error>> {
 _TS__TS_self.position = 0;
 _TS__TS_self.content = input;
-_TS__TS_if let Some(nodes) = self.__ENTRYRULE_()? {
-_TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
-_TS__TS__TS_return Ok(Some(nodes[0].clone()));
+
+_TS__TS_if let Some(nodes) = self._ENTRY_RULE_()? {
+_TS__TS__TS_if self.position == self.content.len() {
+_TS__TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
+_TS__TS__TS__TS_return Ok(nodes[0].clone());
+_TS__TS__TS_}
 _TS__TS_}
-_TS__TS_Ok(None)
+_TS__TS_let (line, col) = self.get_line_col(self.last_position);
+_TS__TS_return Err(
+_TS__TS__TS_format!("Parsing failed. Unexpected character found: '{}' at line {}, column {}",
+_TS__TS__TS__TS_self.last_found,
+_TS__TS__TS__TS_line,
+_TS__TS__TS__TS_col).into()
+_TS__TS_);
 _TS_}
 
-_TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Option<Node>, Box<dyn Error>> {
+_TS_pub fn parse_file(&mut self, file_path: &str) -> Result<Node, Box<dyn Error>> {
 _TS__TS_let content = std::fs::read_to_string(file_path)?;
 _TS__TS_self.parse(content)
 _TS_}
@@ -145,6 +171,10 @@ _TS__TS__TS__TS_}
 _TS__TS__TS__TS_start_pos = self.position;
 _TS__TS__TS_}
 _TS__TS_}
+_TS__TS_if self.position > self.last_position {
+_TS__TS__TS_self.last_position = self.position;
+_TS__TS__TS_self.last_found = self.content[self.position..].chars().next().map(|c| c.to_string()).unwrap_or_else(|| "EOF".to_string());
+_TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_self.fail();
 _TS__TS_Ok(None)
@@ -173,6 +203,10 @@ _TS__TS__TS__TS_}
 _TS__TS__TS__TS_start_pos = self.position;
 _TS__TS__TS_}
 _TS__TS_}
+_TS__TS_if self.position > self.last_position {
+_TS__TS__TS_self.last_position = self.position;
+_TS__TS__TS_self.last_found = self.content[self.position..].chars().next().map(|c| c.to_string()).unwrap_or_else(|| "EOF".to_string());
+_TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_self.fail();
 _TS__TS_Ok(None)
@@ -193,6 +227,10 @@ _TS__TS_if self.content[self.position..].starts_with(&keyword_value) {
 _TS__TS__TS_self.position += keyword_value.len();
 _TS__TS__TS_self.pass();
 _TS__TS__TS_return Ok(Some(vec![Node::new_with_position(_String, vec![], Some(keyword.to_string()), start_pos, self.position)]));
+_TS__TS_}
+_TS__TS_if self.position > self.last_position {
+_TS__TS__TS_self.last_position = self.position;
+_TS__TS__TS_self.last_found = self.content[self.position..].chars().next().map(|c| c.to_string()).unwrap_or_else(|| "EOF".to_string());
 _TS__TS_}
 _TS__TS_self.position = start_pos;
 _TS__TS_self.fail();
