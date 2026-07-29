@@ -17,6 +17,9 @@ _TS_pub debug: bool,
 _TS_debug_indent_level: usize,
 _TS_content: std::string::String,
 _TS_memos: HashMap<usize, HashMap<std::string::String, Box<Option<Vec<Node>>>>>,
+
+_TS_last_found: std::string::String,
+_TS_last_position: usize,
 }
 
 #[allow(dead_code)]
@@ -76,7 +79,7 @@ _TS_pub fn parse(&mut self, input: std::string::String) -> Result<Node, Box<dyn 
 _TS__TS_self.position = 0;
 _TS__TS_self.content = input;
 
-_TS__TS_if let Some(nodes) = self._ENTRY_RULE_()? {
+_TS__TS_if let Some(nodes) = self._ENTRYRULE_()? {
 _TS__TS__TS_if self.position == self.content.len() {
 _TS__TS__TS__TS_let nodes = self.clear_discard_nodes(nodes);
 _TS__TS__TS__TS_return Ok(nodes[0].clone());
