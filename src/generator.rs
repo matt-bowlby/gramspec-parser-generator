@@ -104,7 +104,7 @@ impl Generator {
             let mut expressions = String::from("");
             for i in 0..token_expression.len() {
                 let expression = &token_expression[i];
-                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression)?));
+                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression, 3)?));
                 if i < token_expression.len() - 1 {
                     expressions.push_str("\n");
                 }
@@ -142,7 +142,7 @@ impl Generator {
             let mut expressions = String::from("");
             for i in 0..token_expression.len() {
                 let expression = &token_expression[i];
-                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression)?));
+                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression, 3)?));
                 if i < token_expression.len() - 1 {
                     expressions.push_str("\n");
                 }
@@ -179,7 +179,7 @@ impl Generator {
             let mut expressions = String::from("");
             for i in 0..token_expression.len() {
                 let expression = &token_expression[i];
-                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression)?));
+                expressions.push_str(&format!("_TS__TS__TS_{},", self.to_conditional(expression, 3)?));
                 if i < token_expression.len() - 1 {
                     expressions.push_str("\n");
                 }
@@ -210,63 +210,86 @@ impl Generator {
         Ok(result)
     }
 
-    fn to_conditional(&self, expression: &Expression) -> Result<String, Box<dyn Error>> {
+    fn to_conditional(&self, expression: &Expression, tab_depth: usize) -> Result<String, Box<dyn Error>> {
+        let tab_string: String = "_TS_".repeat(tab_depth);
         match expression {
-            Expression::RuleName(name) => Ok(format!("Rule(\"{}\")", name.value)),
-            Expression::Keyword(keyword) => Ok(format!("Keyword(\"{}\")", keyword.value)),
-            Expression::RegexLiteral(regex) => Ok(format!("RegexLiteral(r#\"^{}\"#)", regex.value)),
+            Expression::RuleName(name) => Ok(format!("_TS_Rule(\"{}\")", name.value)),
+            Expression::Keyword(keyword) => Ok(format!("_TS_Keyword(\"{}\")", keyword.value)),
+            Expression::RegexLiteral(regex) => Ok(format!("_TS_RegexLiteral(r#\"^{}\"#)", regex.value)),
             Expression::StringLiteral(string) => {
                 if string.value == "\"" {
-                    Ok("StringLiteral(\"\\\"\")".to_string())
+                    Ok(format!("_TS_StringLiteral(\"\\\"\")"))
                 } else if string.value == "\\" {
-                    Ok("StringLiteral(\"\\\\\")".to_string())
+                    Ok(format!("_TS_StringLiteral(\"\\\\\")"))
                 } else if string.value == "\n" {
-                    Ok("StringLiteral(\"\\n\")".to_string())
+                    Ok(format!("_TS_StringLiteral(\"\\n\")"))
                 } else if string.value == "\t" {
-                    Ok("StringLiteral(\"\\t\")".to_string())
+                    Ok(format!("_TS_StringLiteral(\"\\t\")"))
                 } else {
-                    Ok(format!("StringLiteral(\"{}\")", string.value))
+                    Ok(format!("_TS_StringLiteral(\"{}\")", string.value))
                 }
             }
             Expression::Discard(expr) => Ok(format!(
-                "Expression::discard({})",
-                self.to_conditional(expr)?
+                "Expression::discard(\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(expr, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::Meta(expr) => Ok(format!(
-                "Expression::meta({})",
-                self.to_conditional(expr)?
+                "Expression::meta(\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(expr, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::Or(left, right) => Ok(format!(
-                "Expression::or({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                "Expression::or(\n{}{},\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(left, tab_depth + 1)?,
+                tab_string,
+                self.to_conditional(right, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::And(left, right) => Ok(format!(
-                "Expression::and({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                "Expression::and(\n{}{},\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(left, tab_depth + 1)?,
+                tab_string,
+                self.to_conditional(right, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::DelimitRepeatOne(left, right) => Ok(format!(
-                "Expression::delimit_repeat_one({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                "Expression::delimit_repeat_one(\n{}{},\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(left, tab_depth + 1)?,
+                tab_string,
+                self.to_conditional(right, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::DelimitRepeatZero(left, right) => Ok(format!(
-                "Expression::delimit_repeat_zero({}, {})",
-                self.to_conditional(left)?,
-                self.to_conditional(right)?
+                "Expression::delimit_repeat_zero(\n{}{},\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(left, tab_depth + 1)?,
+                tab_string,
+                self.to_conditional(right, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::Optional(expr) => Ok(format!(
-                "Expression::optional({})",
-                self.to_conditional(expr)?
+                "Expression::optional(\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(expr, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::RepeatOne(expr) => Ok(format!(
-                "Expression::repeat_one({})",
-                self.to_conditional(expr)?
+                "Expression::repeat_one(\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(expr, tab_depth + 1)?,
+                tab_string,
             )),
             Expression::RepeatZero(expr) => Ok(format!(
-                "Expression::repeat_zero({})",
-                self.to_conditional(expr)?
+                "Expression::repeat_zero(\n{}{}\n{})",
+                tab_string,
+                self.to_conditional(expr, tab_depth + 1)?,
+                tab_string,
             )),
         }
     }
